@@ -34,8 +34,9 @@ final class StatusController: NSObject {
             button.sendAction(on: [.leftMouseUp, .rightMouseUp])
         }
 
+        // Hiding a device changes `custom`, which also decides whether the icon is filled.
         model.$devices
-            .combineLatest(model.$connection)
+            .combineLatest(model.$connection, model.$custom)
             .receive(on: RunLoop.main)
             .sink { [weak self] _ in self?.updateIcon() }
             .store(in: &cancellables)
