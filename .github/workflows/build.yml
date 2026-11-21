@@ -1,0 +1,60 @@
+name: Build
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  macos:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+      - name: Build app
+        env:
+          BUILD_NUMBER: ${{ github.run_number }}
+        run: scripts/build-app.sh
+      - uses: actions/upload-artifact@v6
+        with:
+          name: macos
+          path: dist/*.zip
+
+  release:
+    # Every push to main publishes (or refreshes) the release for the version in VERSION.
+    if: github.ref == 'refs/heads/main'
+    needs: macos
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v5
+      - name: Version
+        id: v
+        run: echo "version=$(cat VERSION)" >> "$GITHUB_OUTPUT"
+      - uses: actions/download-artifact@v7
+        with:
+          path: dist
+          merge-multiple: true
+      - uses: softprops/action-gh-release@v3
+        with:
+          tag_name: v${{ steps.v.outputs.version }}
+          name: Switch ${{ steps.v.outputs.version }}
+          target_commitish: ${{ github.sha }}
+          files: dist/*
+          body: |
+            macOS 13+ on Apple silicon. Unpack the `.zip`, move `Switch.app` to Applications and open it with right-click → Open the first time (the app is not notarized).
+            On first launch allow local network access – Switch needs it to reach the Aqara hub.
+      - name: Keep only the three newest releases
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release list --repo "$GITHUB_REPOSITORY" --limit 200 --json tagName --jq '.[].tagName' \
+            | sort -V -r | tail -n +4 \
+            | while read -r tag; do
+                echo "Deleting old release $tag"
+                gh release delete "$tag" --repo "$GITHUB_REPOSITORY" --yes --cleanup-tag
+              done

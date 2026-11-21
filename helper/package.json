@@ -1,0 +1,19 @@
+{
+  "name": "switch-matter-helper",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Matter controller helper for the Switch macOS app (talks to the Aqara hub over the local network)",
+  "type": "module",
+  "scripts": {
+    "build": "node build.mjs",
+    "test": "node --test test/*.test.mjs"
+  },
+  "dependencies": {
+    "@matter/main": "0.18.0",
+    "@matter/nodejs": "0.18.0",
+    "@project-chip/matter.js": "0.18.0"
+  },
+  "devDependencies": {
+    "esbuild": "^0.25.0"
+  }
+}
