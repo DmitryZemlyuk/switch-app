@@ -8,7 +8,8 @@ await build({
   platform: "node",
   format: "esm",
   target: "node20",
-  minify: true,
+  // Whitespace only: matter.js relies on class and function names, so identifiers must stay intact.
+  minifyWhitespace: true,
   legalComments: "none",
   // matter.js ships a Bun-only storage backend that is never used under Node: stub it out.
   plugins: [{
