@@ -21,7 +21,7 @@ Works only on the home network – there is no remote access by design.
 ## Setup
 
 1. Download the latest `Switch-x.y.z-macos-arm64.zip` from Releases, unpack it and move `Switch.app` to Applications.
-2. Open it with right-click → Open (the app is ad-hoc signed, not notarized) and allow local network access.
+2. The app is ad-hoc signed, not notarized, so clear the quarantine flag once: `xattr -dr com.apple.quarantine /Applications/Switch.app` (or allow it in System Settings → Privacy & Security → Open Anyway). Then open it and allow local network access.
 3. In Aqara Home, open the hub → Matter → add to another ecosystem, copy the 11-digit pairing code and enter it in Switch.
 
 ## Languages
