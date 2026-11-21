@@ -19,12 +19,13 @@ struct HelperEvent: Decodable {
     let message: String?
 }
 
-/// Runs the bundled Node + matter.js helper and exchanges JSON lines with it.
+/// Runs the matter.js helper with the Node.js installed on this Mac and exchanges JSON lines with it.
 /// The helper is restarted with a growing delay if it exits unexpectedly.
 @MainActor
 final class HelperClient {
     var onEvent: ((HelperEvent) -> Void)?
     var onCrash: (() -> Void)?
+    var onNodeMissing: (() -> Void)?
 
     private var process: Process?
     private var input: FileHandle?
@@ -33,6 +34,8 @@ final class HelperClient {
     private var restartDelay: TimeInterval = 1
     private var startedAt = Date()
     private var restartTask: Task<Void, Never>?
+    private var locateTask: Task<Void, Never>?
+    private var nodeURL: URL?
 
     static var supportDirectory: URL {
         let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
@@ -44,11 +47,36 @@ final class HelperClient {
         return base.appendingPathComponent("Logs/Switch/helper.log")
     }
 
+    /// Finds Node.js on this Mac (once) and starts the helper with it.
     func start() {
         stopping = false
         restartTask?.cancel()
+        locateTask?.cancel()
+        if let nodeURL, FileManager.default.isExecutableFile(atPath: nodeURL.path) {
+            launch(node: nodeURL)
+            return
+        }
+        nodeURL = nil
+        locateTask = Task { @MainActor [weak self] in
+            let found = await Task.detached(priority: .userInitiated) { NodeLocator.locate() }.value
+            guard let self, !Task.isCancelled, !self.stopping else { return }
+            if let found {
+                self.appendLog("using node \(found.version.map(String.init).joined(separator: ".")) at \(found.url.path)")
+                self.nodeURL = found.url
+                self.launch(node: found.url)
+            } else {
+                self.appendLog("no suitable Node.js found (need 22.13+ or 20.19+)")
+                self.onNodeMissing?()
+                // Look again every 30 s so the app recovers by itself once Node is installed.
+                self.startedAt = Date()
+                self.restartDelay = 30
+                self.scheduleRestart()
+            }
+        }
+    }
+
+    private func launch(node: URL) {
         guard let resources = Bundle.main.resourceURL else { return }
-        let node = resources.appendingPathComponent("helper/node")
         let script = resources.appendingPathComponent("helper/matter-helper.mjs")
         let storage = Self.supportDirectory.appendingPathComponent("matter", isDirectory: true)
         try? FileManager.default.createDirectory(at: storage, withIntermediateDirectories: true)
@@ -87,6 +115,7 @@ final class HelperClient {
             startedAt = Date()
         } catch {
             appendLog("failed to launch helper: \(error)")
+            nodeURL = nil // look for Node again next time
             onCrash?()
             scheduleRestart()
         }
@@ -95,6 +124,7 @@ final class HelperClient {
     func stop() {
         stopping = true
         restartTask?.cancel()
+        locateTask?.cancel()
         // Closing stdin makes the helper shut matter.js down cleanly; terminate is the backstop.
         try? input?.close()
         input = nil
@@ -138,6 +168,7 @@ final class HelperClient {
         input = nil
         if stopping { return }
         appendLog("helper exited with status \(status)")
+        if Date().timeIntervalSince(startedAt) < 5 { nodeURL = nil } // died at once: re-check Node next time
         onCrash?()
         scheduleRestart()
     }

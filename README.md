@@ -8,13 +8,14 @@ Click the plug icon in the menu bar and you get one tile per plug: tap a tile to
 
 - The Aqara Hub M1S Gen 2 exposes its Zigbee devices as a **Matter bridge** on the local network.
 - Switch pairs with the hub as an additional Matter controller (Aqara Home and other controllers keep working) and talks to it directly over the LAN: discovery via mDNS, commands and live state updates over IPv6/UDP.
-- The Matter stack is [matter.js](https://github.com/project-chip/matter.js), running in a small helper process (bundled Node.js runtime) that the SwiftUI app talks to over JSON lines on stdin/stdout.
+- The Matter stack is [matter.js](https://github.com/project-chip/matter.js), running in a small helper process on the Node.js already installed on the Mac, which the SwiftUI app talks to over JSON lines on stdin/stdout.
 
 Works only on the home network – there is no remote access by design.
 
 ## Requirements
 
 - macOS 13 or newer, Apple silicon
+- Node.js 22.13 or newer (Homebrew, nodejs.org installer, nvm, fnm, Volta and similar are found automatically)
 - An Aqara hub with Matter bridging (Hub M1S Gen 2, M2, M3, E1) on the same network as the Mac
 - IPv6 enabled on the LAN (link-local is enough)
 
@@ -30,7 +31,7 @@ Ukrainian, Russian and English – follows the system language or can be picked 
 
 ## Building
 
-`scripts/build-app.sh` builds everything on macOS: the helper bundle (`helper/`, esbuild), the Swift app (`app/`, SwiftPM), downloads the Node.js runtime and assembles `dist/Switch.app` plus a zip. GitHub Actions runs it on every push to `main` and publishes a release for the version in `VERSION` (only the three newest releases are kept).
+`scripts/build-app.sh` builds everything on macOS: the helper bundle (`helper/`, esbuild), the Swift app (`app/`, SwiftPM) and assembles `dist/Switch.app` plus a zip. GitHub Actions runs it on every push to `main` and publishes a release for the version in `VERSION` (only the three newest releases are kept).
 
 Helper unit tests: `cd helper && npm ci && npm test`.
 

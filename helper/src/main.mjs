@@ -1,6 +1,6 @@
 // Matter controller helper for the Switch app.
 //
-// The app starts this process with the bundled Node runtime (storage folder in SWITCH_STORAGE_DIR)
+// The app starts this process with the Mac's own Node.js (storage folder in SWITCH_STORAGE_DIR)
 // and talks to it with JSON lines:
 //   stdin  (app → helper): {"cmd":"pair","code":"…"} | {"cmd":"set","id":"3","on":true} | {"cmd":"unpair"} | {"cmd":"refresh"}
 //   stdout (helper → app): {"ev":"state","state":"…"} | {"ev":"devices","devices":[…]} | {"ev":"update","id":"3","on":true}

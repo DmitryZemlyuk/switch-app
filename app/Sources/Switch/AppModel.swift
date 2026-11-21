@@ -2,7 +2,7 @@ import Foundation
 import SwiftUI
 
 enum Connection: Equatable {
-    case starting, unpaired, pairing, searching, connected, reconnecting, disconnected, helperFailed
+    case starting, unpaired, pairing, searching, connected, reconnecting, disconnected, helperFailed, nodeMissing
 }
 
 enum IconKind: String, Codable {
@@ -48,6 +48,7 @@ final class AppModel: ObservableObject {
             guard let self, self.connection != .unpaired else { return }
             self.connection = .helperFailed
         }
+        helper.onNodeMissing = { [weak self] in self?.connection = .nodeMissing }
         helper.start()
     }
 

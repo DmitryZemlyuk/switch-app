@@ -49,7 +49,7 @@ struct MainView: View {
                     StatusLine()
                 }
                 Spacer(minLength: 8)
-                if !model.devices.isEmpty {
+                if !model.devices.isEmpty && model.connection != .nodeMissing {
                     Button(model.editing ? l10n.t("done") : l10n.t("edit")) {
                         model.editing.toggle()
                     }
@@ -57,7 +57,15 @@ struct MainView: View {
                 }
             }
 
-            if model.devices.isEmpty {
+            if model.connection == .nodeMissing {
+                Text(l10n.t("node.help"))
+                    .font(.system(size: 12))
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                Link("nodejs.org", destination: URL(string: "https://nodejs.org/")!)
+                    .font(.system(size: 12))
+            } else if model.devices.isEmpty {
                 Text(model.devicesLoaded ? l10n.t("devices.none") : l10n.t("devices.loading"))
                     .font(.system(size: 12))
                     .foregroundStyle(.secondary)
@@ -111,7 +119,7 @@ struct StatusLine: View {
     private var color: Color {
         switch model.connection {
         case .connected: return Color(red: 0x30 / 255, green: 0xA1 / 255, blue: 0x4E / 255)
-        case .disconnected, .helperFailed: return .red
+        case .disconnected, .helperFailed, .nodeMissing: return .red
         default: return .orange
         }
     }
@@ -123,6 +131,7 @@ struct StatusLine: View {
         case .reconnecting: return l10n.t("status.reconnecting")
         case .disconnected: return l10n.t("status.disconnected")
         case .helperFailed: return l10n.t("status.helperFailed")
+        case .nodeMissing: return l10n.t("status.nodeMissing")
         case .starting: return l10n.t("status.starting")
         }
     }

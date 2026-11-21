@@ -46,7 +46,7 @@ jobs:
           target_commitish: ${{ github.sha }}
           files: dist/*
           body: |
-            macOS 13+ on Apple silicon. Unpack the `.zip`, move `Switch.app` to Applications and run `xattr -dr com.apple.quarantine /Applications/Switch.app` once (the app is not notarized).
+            macOS 13+ on Apple silicon, needs Node.js 22.13+ installed. Unpack the `.zip`, move `Switch.app` to Applications and run `xattr -dr com.apple.quarantine /Applications/Switch.app` once (the app is not notarized).
             On first launch allow local network access – Switch needs it to reach the Aqara hub.
       - name: Keep only the three newest releases
         env:

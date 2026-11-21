@@ -1,4 +1,4 @@
-// Bundles the helper into one ESM file that the app runs with its bundled Node runtime.
+// Bundles the helper into one ESM file that the app runs with the Node.js installed on the Mac.
 import { build } from "esbuild";
 
 await build({
@@ -7,8 +7,8 @@ await build({
   bundle: true,
   platform: "node",
   format: "esm",
-  target: "node22",
-  minify: false,
+  target: "node20",
+  minify: true,
   legalComments: "none",
   // matter.js ships a Bun-only storage backend that is never used under Node: stub it out.
   plugins: [{
