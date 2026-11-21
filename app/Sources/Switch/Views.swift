@@ -50,10 +50,18 @@ struct MainView: View {
                 }
                 Spacer(minLength: 8)
                 if !model.devices.isEmpty && model.connection != .nodeMissing {
-                    Button(model.editing ? l10n.t("done") : l10n.t("edit")) {
+                    Button {
                         model.editing.toggle()
+                    } label: {
+                        // Both titles take part in layout, so the pill keeps one width when the title flips.
+                        ZStack {
+                            Text(l10n.t("edit")).hidden()
+                            Text(l10n.t("done")).hidden()
+                            Text(model.editing ? l10n.t("done") : l10n.t("edit"))
+                        }
                     }
                     .buttonStyle(PillButtonStyle(prominent: model.editing))
+                    .noFocusRing()
                 }
             }
 
@@ -181,6 +189,7 @@ struct TileView: View {
             .contentShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
         }
         .buttonStyle(.plain)
+        .noFocusRing()
         .disabled(!enabled)
         .opacity(enabled ? 1 : 0.55)
         .animation(.easeOut(duration: 0.15), value: device.on)
@@ -333,5 +342,17 @@ struct PillButtonStyle: ButtonStyle {
             .background(Capsule().fill(prominent ? Palette.accent : Palette.chip(scheme)))
             .opacity(configuration.isPressed ? 0.7 : 1)
             .contentShape(Capsule())
+    }
+}
+
+extension View {
+    /// The system focus ring is drawn around the label, not our custom capsule or tile, so it never lines up.
+    @ViewBuilder
+    func noFocusRing() -> some View {
+        if #available(macOS 14.0, *) {
+            self.focusEffectDisabled()
+        } else {
+            self.focusable(false)
+        }
     }
 }
