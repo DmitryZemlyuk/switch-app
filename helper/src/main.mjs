@@ -93,8 +93,13 @@ async function attachNode(nodeId) {
     switches.clear();
     send({ ev: "state", state: "unpaired" });
   });
-  send({ ev: "state", state: "searching" });
-  node.connect();
+  // After commissioning the node is usually connected already; after a restart it is not.
+  if (node.isConnected) {
+    send({ ev: "state", state: connectionStateName(node.connectionState) });
+  } else {
+    send({ ev: "state", state: "searching" });
+    node.connect();
+  }
   if (node.initialized) await collectDevices();
 }
 
