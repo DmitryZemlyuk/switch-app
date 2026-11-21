@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { kindForDeviceType, normalizePairingCode, connectionStateName, parseCommand } from "../src/lib.mjs";
+import { kindForDeviceType, kindForDeviceTypes, normalizePairingCode, connectionStateName, parseCommand } from "../src/lib.mjs";
 
 test("pairing codes", () => {
   assert.deepEqual(normalizePairingCode("3497-011-2332"), { type: "manual", value: "34970112332" });
@@ -15,6 +15,9 @@ test("device kinds", () => {
   assert.equal(kindForDeviceType(0x010a), "plug");
   assert.equal(kindForDeviceType(0x0100), "light");
   assert.equal(kindForDeviceType(undefined), "plug");
+  assert.equal(kindForDeviceTypes([0x0013, 0x0100]), "light");
+  assert.equal(kindForDeviceTypes([0x0013, 0x010a]), "plug");
+  assert.equal(kindForDeviceTypes(undefined), "plug");
 });
 
 test("states", () => {

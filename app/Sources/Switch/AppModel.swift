@@ -21,6 +21,7 @@ struct Device: Identifiable, Equatable {
 struct Customization: Codable, Equatable {
     var name: String?
     var icon: IconKind?
+    var hidden: Bool?
 }
 
 @MainActor
@@ -52,7 +53,10 @@ final class AppModel: ObservableObject {
         helper.start()
     }
 
-    var anyOn: Bool { devices.contains { $0.on } }
+    /// Devices shown as tiles: everything the user has not hidden in edit mode.
+    var visibleDevices: [Device] { devices.filter { !isHidden($0) } }
+
+    var anyOn: Bool { visibleDevices.contains { $0.on } }
 
     var canControl: Bool { connection == .connected }
 
@@ -87,6 +91,17 @@ final class AppModel: ObservableObject {
     func setIcon(_ icon: IconKind, for device: Device) {
         var entry = custom[device.id] ?? Customization()
         entry.icon = icon
+        custom[device.id] = entry
+        saveCustom()
+    }
+
+    func isHidden(_ device: Device) -> Bool {
+        custom[device.id]?.hidden ?? false
+    }
+
+    func setHidden(_ hidden: Bool, for device: Device) {
+        var entry = custom[device.id] ?? Customization()
+        entry.hidden = hidden
         custom[device.id] = entry
         saveCustom()
     }

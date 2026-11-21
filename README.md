@@ -2,7 +2,7 @@
 
 A tiny macOS menu bar app for turning Aqara smart plugs on and off – locally, without the Aqara cloud.
 
-Click the plug icon in the menu bar and you get one tile per plug: tap a tile to toggle it. Plugs can be renamed and shown as a plug or a light. Right-click the icon for the app menu (open at login, language, log, unpair, quit).
+Click the plug icon in the menu bar and you get one tile per plug: tap a tile to toggle it. Plugs can be renamed, shown as a plug or a light, or hidden from the list (handy for the hub's own night light). Right-click the icon for the app menu (open at login, language, log, unpair, quit).
 
 ## How it works
 

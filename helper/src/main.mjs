@@ -12,7 +12,7 @@ import { Environment, Logger } from "@matter/main";
 import { ManualPairingCodeCodec, QrPairingCodeCodec } from "@matter/main/types";
 import { GeneralCommissioning, OnOff, BridgedDeviceBasicInformation } from "@matter/main/clusters";
 import { CommissioningController } from "@project-chip/matter.js";
-import { kindForDeviceType, normalizePairingCode, connectionStateName, parseCommand } from "./lib.mjs";
+import { kindForDeviceTypes, normalizePairingCode, connectionStateName, parseCommand } from "./lib.mjs";
 
 Logger.destinations.default.write = (text) => process.stderr.write(text + "\n");
 Logger.level = process.env.SWITCH_DEBUG ? "debug" : "notice";
@@ -65,7 +65,9 @@ async function collectDevices() {
         try { if (!label) label = await bridged.getProductNameAttribute(false); } catch {}
         try { reachable = (await bridged.getReachableAttribute(false)) !== false; } catch {}
       }
-      found.push({ id, label: label || "", on, reachable, kind: kindForDeviceType(ep.deviceType) });
+      let types = [ep.deviceType];
+      try { types = types.concat(ep.getDeviceTypes().map((t) => t.code)); } catch {}
+      found.push({ id, label: label || "", on, reachable, kind: kindForDeviceTypes(types) });
     }
     for (const child of ep.getChildEndpoints()) await walk(child);
   };

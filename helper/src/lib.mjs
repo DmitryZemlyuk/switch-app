@@ -7,6 +7,11 @@ export function kindForDeviceType(deviceType) {
   return LIGHT_DEVICE_TYPES.has(Number(deviceType)) ? "light" : "plug";
 }
 
+/** A bridged endpoint lists several device types (for example "bridged node" plus the real one): any light wins. */
+export function kindForDeviceTypes(deviceTypes) {
+  return (deviceTypes ?? []).some((t) => kindForDeviceType(t) === "light") ? "light" : "plug";
+}
+
 /**
  * Normalises what the user typed into the pairing field.
  * Returns { type: "qr", value } for "MT:..." strings, { type: "manual", value } for 11 or 21 digits,

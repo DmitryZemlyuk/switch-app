@@ -76,9 +76,16 @@ struct MainView: View {
                         EditCard(device: device)
                     }
                 }
+            } else if model.visibleDevices.isEmpty {
+                Text(l10n.t("devices.allHidden"))
+                    .font(.system(size: 12))
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .frame(maxWidth: .infinity, minHeight: 80)
             } else {
                 LazyVGrid(columns: columns, spacing: 10) {
-                    ForEach(model.devices) { device in
+                    ForEach(model.visibleDevices) { device in
                         TileView(
                             device: device,
                             name: model.displayName(for: device),
@@ -215,6 +222,8 @@ struct EditCard: View {
     @EnvironmentObject var l10n: L10n
     @Environment(\.colorScheme) private var scheme
 
+    private var hidden: Bool { model.isHidden(device) }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             Text(l10n.t("edit.name"))
@@ -228,6 +237,7 @@ struct EditCard: View {
                 )
             )
             .textFieldStyle(.roundedBorder)
+            .disabled(hidden)
 
             Picker("", selection: Binding(
                 get: { model.icon(for: device) },
@@ -238,6 +248,18 @@ struct EditCard: View {
             }
             .pickerStyle(.segmented)
             .labelsHidden()
+            .disabled(hidden)
+
+            Toggle(isOn: Binding(
+                get: { !model.isHidden(device) },
+                set: { model.setHidden(!$0, for: device) }
+            )) {
+                Text(l10n.t("edit.show"))
+                    .font(.system(size: 12))
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .toggleStyle(.switch)
+            .controlSize(.small)
         }
         .padding(12)
         .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(Palette.tileOff(scheme)))
