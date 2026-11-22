@@ -234,21 +234,32 @@ struct TileView: View {
     var body: some View {
         Button(action: action) {
             VStack(alignment: .leading, spacing: 0) {
-                ZStack {
-                    Circle().fill(iconBackground)
-                    Image(systemName: symbol)
-                        .font(.system(size: 14, weight: .semibold))
-                        .foregroundStyle(iconForeground)
+                HStack(alignment: .top) {
+                    ZStack {
+                        Circle().fill(iconBackground)
+                        Image(systemName: symbol)
+                            .font(.system(size: 14, weight: .semibold))
+                            .foregroundStyle(iconForeground)
+                    }
+                    .frame(width: 30, height: 30)
+                    Spacer(minLength: 6)
+                    if let watts = device.watts, device.reachable {
+                        Text(l10n.watts(watts))
+                            .font(.system(size: 15, weight: .semibold).monospacedDigit())
+                            .foregroundStyle(isOn ? Color.white : Color.secondary)
+                            .lineLimit(1)
+                    }
                 }
-                .frame(width: 30, height: 30)
                 Spacer(minLength: 8)
                 Text(name)
                     .font(.system(size: 13, weight: .semibold))
                     .lineLimit(1)
                     .truncationMode(.tail)
                 Text(status)
-                    .font(.system(size: 11))
+                    .font(.system(size: 11).monospacedDigit())
                     .foregroundStyle(subForeground)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.85)
                     .padding(.top, 2)
             }
             .padding(12)
@@ -277,6 +288,10 @@ struct TileView: View {
 
     private var status: String {
         if !device.reachable { return l10n.t("state.unreachable") }
+        if let wh = device.energyWh {
+            // Lifetime total, exactly as the plug's counter reports it.
+            return "\(isOn ? l10n.t("state.onShort") : l10n.t("state.offShort")) · \(l10n.kWh(wh / 1000))"
+        }
         return isOn ? l10n.t("state.on") : l10n.t("state.off")
     }
 

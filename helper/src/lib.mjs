@@ -59,7 +59,10 @@ export function parseCommand(line) {
 }
 
 // Matter cluster ids used for sensors.
-export const CLUSTER = { BOOLEAN_STATE: 0x0045, OCCUPANCY: 0x0406, SWITCH: 0x003b, POWER_SOURCE: 0x002f };
+export const CLUSTER = {
+  BOOLEAN_STATE: 0x0045, OCCUPANCY: 0x0406, SWITCH: 0x003b, POWER_SOURCE: 0x002f,
+  POWER_MEASUREMENT: 0x0090, ENERGY_MEASUREMENT: 0x0091,
+};
 
 const SENSOR_DEVICE_TYPES = new Map([
   [0x0043, "leak"], // Water Leak Detector
@@ -98,3 +101,19 @@ export function batteryFrom(percentRaw, chargeLevel) {
 
 /** Switch cluster events that mean "the button was pressed". */
 export const PRESS_EVENTS = new Set(["initialPress", "shortRelease", "longPress", "multiPressComplete"]);
+
+/** ElectricalPowerMeasurement.activePower is in milliwatts (int64, may arrive as bigint). Returns watts or null. */
+export function wattsFrom(milliwatts) {
+  if (milliwatts === null || milliwatts === undefined) return null;
+  const value = Number(milliwatts);
+  if (!Number.isFinite(value)) return null;
+  return Math.round(Math.abs(value) / 100) / 10; // one decimal
+}
+
+/** ElectricalEnergyMeasurement.cumulativeEnergyImported is { energy: mWh, … } or null. Returns watt-hours or null. */
+export function energyWhFrom(measurement) {
+  if (!measurement || measurement.energy === null || measurement.energy === undefined) return null;
+  const value = Number(measurement.energy);
+  if (!Number.isFinite(value) || value < 0) return null;
+  return value / 1000;
+}

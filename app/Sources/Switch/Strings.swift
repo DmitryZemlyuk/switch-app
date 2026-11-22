@@ -35,6 +35,10 @@ enum Strings {
             "err.set_failed": "Розетка не ответила",
             "err.already_paired": "Хаб уже подключён",
             "edit.name": "Название",
+            "state.onShort": "Вкл.",
+            "state.offShort": "Выкл.",
+            "unit.w": "Вт",
+            "unit.kwh": "кВт·ч",
             "tab.plugs": "Розетки",
             "tab.sensors": "Датчики",
             "sensors.loading": "Загружаю датчики…",
@@ -97,6 +101,10 @@ enum Strings {
             "err.set_failed": "Розетка не відповіла",
             "err.already_paired": "Хаб уже підключено",
             "edit.name": "Назва",
+            "state.onShort": "Увімк.",
+            "state.offShort": "Вимк.",
+            "unit.w": "Вт",
+            "unit.kwh": "кВт·год",
             "tab.plugs": "Розетки",
             "tab.sensors": "Датчики",
             "sensors.loading": "Завантажую датчики…",
@@ -159,6 +167,10 @@ enum Strings {
             "err.set_failed": "The plug didn’t respond",
             "err.already_paired": "The hub is already connected",
             "edit.name": "Name",
+            "state.onShort": "On",
+            "state.offShort": "Off",
+            "unit.w": "W",
+            "unit.kwh": "kWh",
             "tab.plugs": "Plugs",
             "tab.sensors": "Sensors",
             "sensors.loading": "Loading sensors…",
@@ -232,6 +244,26 @@ final class L10n: ObservableObject {
 
     func t(_ key: String, _ text: String) -> String {
         t(key).replacingOccurrences(of: "%@", with: text)
+    }
+
+    /// A number with the app language's decimal separator.
+    func number(_ value: Double, fractionDigits: Int) -> String {
+        let formatter = NumberFormatter()
+        formatter.locale = Locale(identifier: resolved.rawValue)
+        formatter.numberStyle = .decimal
+        formatter.minimumFractionDigits = fractionDigits
+        formatter.maximumFractionDigits = fractionDigits
+        return formatter.string(from: NSNumber(value: value)) ?? String(value)
+    }
+
+    /// "38 W", or "3.4 W" below 10 W.
+    func watts(_ value: Double) -> String {
+        "\(number(value, fractionDigits: value < 10 && value > 0 ? 1 : 0)) \(t("unit.w"))"
+    }
+
+    /// "0.42 kWh"; one decimal from 100 kWh up so long-running counters still fit on a tile.
+    func kWh(_ value: Double) -> String {
+        "\(number(value, fractionDigits: value < 100 ? 2 : 1)) \(t("unit.kwh"))"
     }
 
     /// "2 minutes ago" in the app language; "just now" for the last minute.
