@@ -185,8 +185,8 @@ async function attachNode(nodeId) {
                (path.attributeName === "nodeLabel" || path.attributeName === "reachable")) {
       scheduleCollect();
     } else if (path.clusterId === CLUSTER.POWER_MEASUREMENT && path.attributeName === "activePower") {
-      const watts = wattsFrom(value);
-      if (watts !== null) send({ ev: "power", id: String(path.endpointId), watts });
+      // Some plugs report null instead of 0 when switched off.
+      send({ ev: "power", id: String(path.endpointId), watts: wattsFrom(value) ?? 0 });
     } else if (path.clusterId === CLUSTER.ENERGY_MEASUREMENT && path.attributeName === "cumulativeEnergyImported") {
       const energyWh = energyWhFrom(value);
       if (energyWh !== null) send({ ev: "power", id: String(path.endpointId), energyWh });

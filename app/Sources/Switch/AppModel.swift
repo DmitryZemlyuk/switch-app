@@ -209,6 +209,7 @@ final class AppModel: ObservableObject {
               let index = devices.firstIndex(where: { $0.id == device.id }) else { return }
         let target = !devices[index].on
         devices[index].on = target // optimistic; the helper confirms or reverts
+        if !target, devices[index].watts != nil { devices[index].watts = 0 } // a switched-off plug draws nothing
         helper.send(["cmd": "set", "id": device.id, "on": target])
     }
 
@@ -264,6 +265,8 @@ final class AppModel: ObservableObject {
         case "update":
             if let id = event.id, let on = event.on, let index = devices.firstIndex(where: { $0.id == id }) {
                 devices[index].on = on
+                // Don't keep showing the last load until the meter's next report arrives.
+                if !on, devices[index].watts != nil { devices[index].watts = 0 }
             }
         case "error":
             handleError(code: event.code ?? "")
