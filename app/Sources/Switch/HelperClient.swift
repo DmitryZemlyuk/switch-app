@@ -10,9 +10,24 @@ struct HelperEvent: Decodable {
         let kind: String?
     }
 
+    struct RawBattery: Decodable {
+        let percent: Int?
+        let level: String?
+    }
+
+    struct RawSensor: Decodable {
+        let id: String
+        let label: String?
+        let reachable: Bool?
+        let type: String
+        let active: Bool?
+        let battery: RawBattery?
+    }
+
     let ev: String
     let state: String?
     let devices: [RawDevice]?
+    let sensors: [RawSensor]?
     let id: String?
     let on: Bool?
     let code: String?

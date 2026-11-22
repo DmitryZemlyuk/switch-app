@@ -4,15 +4,19 @@
 // and talks to it with JSON lines:
 //   stdin  (app → helper): {"cmd":"pair","code":"…"} | {"cmd":"set","id":"3","on":true} | {"cmd":"unpair"} | {"cmd":"refresh"}
 //   stdout (helper → app): {"ev":"state","state":"…"} | {"ev":"devices","devices":[…]} | {"ev":"update","id":"3","on":true}
+//                          {"ev":"sensors","sensors":[…]} | {"ev":"press","id":"7"}
 //                          {"ev":"error","code":"…","message":"…"}
 // All matter.js logging goes to stderr so stdout stays a clean protocol channel.
 
 import { createInterface } from "node:readline";
 import { Environment, Logger } from "@matter/main";
 import { ManualPairingCodeCodec, QrPairingCodeCodec } from "@matter/main/types";
-import { GeneralCommissioning, OnOff, BridgedDeviceBasicInformation } from "@matter/main/clusters";
+import { GeneralCommissioning, OnOff, BridgedDeviceBasicInformation, BooleanState, OccupancySensing, PowerSource } from "@matter/main/clusters";
 import { CommissioningController } from "@project-chip/matter.js";
-import { kindForDeviceTypes, normalizePairingCode, connectionStateName, parseCommand } from "./lib.mjs";
+import {
+  kindForDeviceTypes, normalizePairingCode, connectionStateName, parseCommand,
+  sensorTypeFor, batteryFrom, CLUSTER, PRESS_EVENTS,
+} from "./lib.mjs";
 
 Logger.destinations.default.write = (text) => process.stderr.write(text + "\n");
 Logger.level = process.env.SWITCH_DEBUG ? "debug" : "notice";
@@ -41,58 +45,135 @@ let node; // PairedNode of the hub
 let busy = false; // pairing or unpairing in progress
 const switches = new Map(); // endpoint id → OnOff cluster client
 
+let structureLogged = false;
+
+async function readLabel(ep) {
+  const bridged = ep.getClusterClient(BridgedDeviceBasicInformation.Cluster);
+  let label;
+  let reachable = true;
+  if (bridged) {
+    try { label = await bridged.getNodeLabelAttribute(false); } catch {}
+    try { if (!label) label = await bridged.getProductNameAttribute(false); } catch {}
+    try { reachable = (await bridged.getReachableAttribute(false)) !== false; } catch {}
+  }
+  return { label: label || "", reachable };
+}
+
+async function readBattery(ep) {
+  const power = ep.getClusterClient(PowerSource.Cluster);
+  if (!power) return null;
+  let percentRaw = null;
+  let level;
+  try { percentRaw = await power.getBatPercentRemainingAttribute?.(false); } catch {}
+  try { level = await power.getBatChargeLevelAttribute?.(false); } catch {}
+  return batteryFrom(percentRaw, level);
+}
+
+async function readActive(ep, type) {
+  try {
+    if (type === "motion") {
+      const occupancy = await ep.getClusterClient(OccupancySensing.Cluster)?.getOccupancyAttribute(false);
+      return !!occupancy?.occupied;
+    }
+    if (type === "leak" || type === "contact") {
+      return !!(await ep.getClusterClient(BooleanState.Cluster)?.getStateValueAttribute(false));
+    }
+  } catch {}
+  return false;
+}
+
 async function collectDevices() {
   if (!node) return;
-  const found = [];
+  const plugs = [];
+  const sensors = [];
   const seen = new Set();
   switches.clear();
+  const logLines = [];
 
   const walk = async (ep) => {
     const number = ep.getNumber();
     if (seen.has(number)) return;
     seen.add(number);
+    let types = [ep.deviceType];
+    try { types = types.concat(ep.getDeviceTypes().map((t) => t.code)); } catch {}
+    let clusterIds = [];
+    try { clusterIds = ep.getAllClusterClients().map((c) => c.id); } catch {}
+    if (!structureLogged) {
+      const hex = (n) => "0x" + Number(n).toString(16).padStart(4, "0");
+      logLines.push(`  endpoint ${number}: types [${[...new Set(types.map(Number))].map(hex).join(", ")}] clusters [${clusterIds.map(hex).join(", ")}]`);
+    }
+
     const onOff = ep.getClusterClient(OnOff.Cluster);
     if (onOff && number !== 0) {
       const id = String(number);
       switches.set(id, onOff);
       let on = false;
-      let label;
-      let reachable = true;
       try { on = !!(await onOff.getOnOffAttribute(false)); } catch {}
-      const bridged = ep.getClusterClient(BridgedDeviceBasicInformation.Cluster);
-      if (bridged) {
-        try { label = await bridged.getNodeLabelAttribute(false); } catch {}
-        try { if (!label) label = await bridged.getProductNameAttribute(false); } catch {}
-        try { reachable = (await bridged.getReachableAttribute(false)) !== false; } catch {}
+      const { label, reachable } = await readLabel(ep);
+      plugs.push({ id, label, on, reachable, kind: kindForDeviceTypes(types) });
+    } else if (number !== 0) {
+      const type = sensorTypeFor(types, clusterIds);
+      if (type) {
+        const { label, reachable } = await readLabel(ep);
+        sensors.push({
+          id: String(number),
+          label,
+          reachable,
+          type,
+          active: await readActive(ep, type),
+          battery: await readBattery(ep),
+        });
       }
-      let types = [ep.deviceType];
-      try { types = types.concat(ep.getDeviceTypes().map((t) => t.code)); } catch {}
-      found.push({ id, label: label || "", on, reachable, kind: kindForDeviceTypes(types) });
     }
     for (const child of ep.getChildEndpoints()) await walk(child);
   };
 
   for (const device of node.getDevices()) await walk(device);
-  found.sort((a, b) => Number(a.id) - Number(b.id));
-  send({ ev: "devices", devices: found });
+  if (!structureLogged && seen.size > 0) {
+    structureLogged = true;
+    process.stderr.write(`hub structure (${seen.size} endpoints):\n${logLines.join("\n")}\n`);
+  }
+  const byId = (a, b) => Number(a.id) - Number(b.id);
+  send({ ev: "devices", devices: plugs.sort(byId) });
+  send({ ev: "sensors", sensors: sensors.sort(byId) });
+}
+
+// Many attribute reports arrive in bursts: collect once after they settle.
+let collectTimer;
+function scheduleCollect() {
+  clearTimeout(collectTimer);
+  collectTimer = setTimeout(() => collectDevices().catch(reportError("devices")), 250);
 }
 
 async function attachNode(nodeId) {
   node = await controller.getNode(nodeId);
   node.events.stateChanged.on((state) => send({ ev: "state", state: connectionStateName(state) }));
-  node.events.initialized.on(() => collectDevices().catch(reportError("devices")));
-  node.events.structureChanged.on(() => collectDevices().catch(reportError("devices")));
+  node.events.initialized.on(() => scheduleCollect());
+  node.events.structureChanged.on(() => {
+    structureLogged = false;
+    scheduleCollect();
+  });
   node.events.attributeChanged.on(({ path, value }) => {
     if (path.clusterId === OnOff.Cluster.id && path.attributeName === "onOff") {
       send({ ev: "update", id: String(path.endpointId), on: !!value });
     } else if (path.clusterId === BridgedDeviceBasicInformation.Cluster.id &&
                (path.attributeName === "nodeLabel" || path.attributeName === "reachable")) {
-      collectDevices().catch(reportError("devices"));
+      scheduleCollect();
+    } else if (path.clusterId === CLUSTER.BOOLEAN_STATE || path.clusterId === CLUSTER.OCCUPANCY ||
+               (path.clusterId === CLUSTER.POWER_SOURCE && String(path.attributeName).startsWith("bat"))) {
+      scheduleCollect();
+    }
+  });
+  node.events.eventTriggered.on(({ path }) => {
+    if (path.clusterId === CLUSTER.SWITCH && PRESS_EVENTS.has(path.eventName)) {
+      send({ ev: "press", id: String(path.endpointId) });
     }
   });
   node.events.decommissioned.on(() => {
     node = undefined;
     switches.clear();
+    send({ ev: "devices", devices: [] });
+    send({ ev: "sensors", sensors: [] });
     send({ ev: "state", state: "unpaired" });
   });
   // After commissioning the node is usually connected already; after a restart it is not.
@@ -175,6 +256,7 @@ async function unpair() {
     switches.clear();
     busy = false;
     send({ ev: "devices", devices: [] });
+    send({ ev: "sensors", sensors: [] });
     send({ ev: "state", state: "unpaired" });
   }
 }

@@ -35,6 +35,25 @@ enum Strings {
             "err.set_failed": "Розетка не ответила",
             "err.already_paired": "Хаб уже подключён",
             "edit.name": "Название",
+            "tab.plugs": "Розетки",
+            "tab.sensors": "Датчики",
+            "sensors.loading": "Загружаю датчики…",
+            "sensors.none": "На хабе не нашлось датчиков",
+            "sensor.leak": "Датчик протечки",
+            "sensor.motion": "Датчик движения",
+            "sensor.button": "Кнопка",
+            "sensor.contact": "Датчик открытия",
+            "leak.dry": "Сухо",
+            "leak.wet": "Протечка!",
+            "motion.now": "Движение сейчас",
+            "motion.ago": "Движение %@",
+            "motion.none": "Тихо",
+            "button.ago": "Нажата %@",
+            "button.none": "Ещё не нажимали",
+            "contact.closed": "Закрыт",
+            "contact.open": "Открыт",
+            "battery.low": "Скоро сядет",
+            "time.justNow": "только что",
             "edit.show": "Показывать в списке",
             "devices.allHidden": "Все устройства скрыты. Нажми «Изменить», чтобы вернуть.",
             "icon.plug": "Розетка",
@@ -78,6 +97,25 @@ enum Strings {
             "err.set_failed": "Розетка не відповіла",
             "err.already_paired": "Хаб уже підключено",
             "edit.name": "Назва",
+            "tab.plugs": "Розетки",
+            "tab.sensors": "Датчики",
+            "sensors.loading": "Завантажую датчики…",
+            "sensors.none": "На хабі не знайшлося датчиків",
+            "sensor.leak": "Датчик протікання",
+            "sensor.motion": "Датчик руху",
+            "sensor.button": "Кнопка",
+            "sensor.contact": "Датчик відкриття",
+            "leak.dry": "Сухо",
+            "leak.wet": "Протікання!",
+            "motion.now": "Рух зараз",
+            "motion.ago": "Рух %@",
+            "motion.none": "Тихо",
+            "button.ago": "Натиснута %@",
+            "button.none": "Ще не натискали",
+            "contact.closed": "Закрито",
+            "contact.open": "Відкрито",
+            "battery.low": "Скоро сяде",
+            "time.justNow": "щойно",
             "edit.show": "Показувати у списку",
             "devices.allHidden": "Усі пристрої приховано. Натисни «Змінити», щоб повернути.",
             "icon.plug": "Розетка",
@@ -121,6 +159,25 @@ enum Strings {
             "err.set_failed": "The plug didn’t respond",
             "err.already_paired": "The hub is already connected",
             "edit.name": "Name",
+            "tab.plugs": "Plugs",
+            "tab.sensors": "Sensors",
+            "sensors.loading": "Loading sensors…",
+            "sensors.none": "No sensors found on the hub",
+            "sensor.leak": "Leak sensor",
+            "sensor.motion": "Motion sensor",
+            "sensor.button": "Button",
+            "sensor.contact": "Contact sensor",
+            "leak.dry": "Dry",
+            "leak.wet": "Leak!",
+            "motion.now": "Motion now",
+            "motion.ago": "Motion %@",
+            "motion.none": "No motion",
+            "button.ago": "Pressed %@",
+            "button.none": "Not pressed yet",
+            "contact.closed": "Closed",
+            "contact.open": "Open",
+            "battery.low": "Low battery",
+            "time.justNow": "just now",
             "edit.show": "Show in list",
             "devices.allHidden": "All devices are hidden. Click Edit to bring them back.",
             "icon.plug": "Plug",
@@ -171,5 +228,18 @@ final class L10n: ObservableObject {
 
     func t(_ key: String, _ number: Int) -> String {
         String(format: t(key), number)
+    }
+
+    func t(_ key: String, _ text: String) -> String {
+        t(key).replacingOccurrences(of: "%@", with: text)
+    }
+
+    /// "2 minutes ago" in the app language; "just now" for the last minute.
+    func relative(_ date: Date, now: Date = Date()) -> String {
+        if now.timeIntervalSince(date) < 60 { return t("time.justNow") }
+        let formatter = RelativeDateTimeFormatter()
+        formatter.locale = Locale(identifier: resolved.rawValue)
+        formatter.unitsStyle = .full
+        return formatter.localizedString(for: date, relativeTo: now)
     }
 }

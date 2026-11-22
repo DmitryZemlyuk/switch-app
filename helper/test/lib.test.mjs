@@ -35,3 +35,29 @@ test("commands", () => {
   assert.equal(parseCommand("nope"), null);
   assert.equal(parseCommand('{"cmd":"rm"}'), null);
 });
+
+import { sensorTypeFor, batteryFrom, PRESS_EVENTS } from "../src/lib.mjs";
+
+test("sensor types", () => {
+  assert.equal(sensorTypeFor([0x0013, 0x0043], [0x0045]), "leak");
+  assert.equal(sensorTypeFor([0x0107], []), "motion");
+  assert.equal(sensorTypeFor([0x000f], [0x003b]), "button");
+  assert.equal(sensorTypeFor([0x0013], [0x003b]), "button");
+  assert.equal(sensorTypeFor([0x0013], [0x0406]), "motion");
+  assert.equal(sensorTypeFor([0x0013], [0x0045]), "contact");
+  assert.equal(sensorTypeFor([0x000e], [0x001d]), null);
+  assert.equal(sensorTypeFor(undefined, undefined), null);
+});
+
+test("battery", () => {
+  assert.deepEqual(batteryFrom(174, 0), { percent: 87, level: "ok" });
+  assert.deepEqual(batteryFrom(null, 2), { percent: null, level: "critical" });
+  assert.deepEqual(batteryFrom(200, undefined), { percent: 100, level: null });
+  assert.equal(batteryFrom(null, undefined), null);
+  assert.equal(batteryFrom(255, 7), null);
+});
+
+test("press events", () => {
+  assert.ok(PRESS_EVENTS.has("multiPressComplete"));
+  assert.ok(!PRESS_EVENTS.has("longRelease"));
+});

@@ -36,7 +36,7 @@ final class StatusController: NSObject {
 
         // Hiding a device changes `custom`, which also decides whether the icon is filled.
         model.$devices
-            .combineLatest(model.$connection, model.$custom)
+            .combineLatest(model.$connection, model.$custom, model.$sensors)
             .receive(on: RunLoop.main)
             .sink { [weak self] _ in self?.updateIcon() }
             .store(in: &cancellables)
@@ -47,9 +47,24 @@ final class StatusController: NSObject {
         let symbol = model.anyOn ? "powerplug.fill" : "powerplug"
         let image = NSImage(systemSymbolName: symbol, accessibilityDescription: "Switch")
         image?.isTemplate = true
-        item.button?.image = image
+        guard let button = item.button else { return }
+        button.image = image
+        button.imagePosition = .imageLeft
         // Dim the icon while the hub can't be controlled.
-        item.button?.appearsDisabled = !(model.connection == .connected || model.connection == .unpaired)
+        button.appearsDisabled = !(model.connection == .connected || model.connection == .unpaired)
+        // A coloured dot next to the plug: red for a leak, orange for a low battery.
+        if model.needsAttention {
+            let color: NSColor = model.anyLeak ? .systemRed : .systemOrange
+            button.attributedTitle = NSAttributedString(string: "●", attributes: [
+                .foregroundColor: color,
+                .font: NSFont.systemFont(ofSize: 7),
+                .baselineOffset: 3
+            ])
+            item.length = NSStatusItem.variableLength
+        } else {
+            button.title = ""
+            item.length = NSStatusItem.squareLength
+        }
     }
 
     @objc private func clicked(_ sender: NSStatusBarButton) {

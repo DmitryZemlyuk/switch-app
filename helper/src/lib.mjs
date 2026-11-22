@@ -57,3 +57,44 @@ export function parseCommand(line) {
       return null;
   }
 }
+
+// Matter cluster ids used for sensors.
+export const CLUSTER = { BOOLEAN_STATE: 0x0045, OCCUPANCY: 0x0406, SWITCH: 0x003b, POWER_SOURCE: 0x002f };
+
+const SENSOR_DEVICE_TYPES = new Map([
+  [0x0043, "leak"], // Water Leak Detector
+  [0x0107, "motion"], // Occupancy Sensor
+  [0x000f, "button"], // Generic Switch
+  [0x0015, "contact"], // Contact Sensor
+]);
+
+/**
+ * Decides what kind of sensor an endpoint is, from its device types first and its clusters second.
+ * Returns null for endpoints that are not sensors.
+ */
+export function sensorTypeFor(deviceTypes, clusterIds) {
+  for (const type of deviceTypes ?? []) {
+    const kind = SENSOR_DEVICE_TYPES.get(Number(type));
+    if (kind) return kind;
+  }
+  const clusters = new Set((clusterIds ?? []).map(Number));
+  if (clusters.has(CLUSTER.SWITCH)) return "button";
+  if (clusters.has(CLUSTER.OCCUPANCY)) return "motion";
+  if (clusters.has(CLUSTER.BOOLEAN_STATE)) return "contact";
+  return null;
+}
+
+/**
+ * Battery info from the PowerSource cluster. `percentRaw` is in half-percent units (0–200, null when unknown),
+ * `chargeLevel` is 0 ok, 1 warning, 2 critical. Returns null when the device reports neither.
+ */
+export function batteryFrom(percentRaw, chargeLevel) {
+  const levels = ["ok", "warning", "critical"];
+  const percent = typeof percentRaw === "number" && percentRaw >= 0 && percentRaw <= 200 ? Math.round(percentRaw / 2) : null;
+  const level = levels[chargeLevel] ?? null;
+  if (percent === null && level === null) return null;
+  return { percent, level };
+}
+
+/** Switch cluster events that mean "the button was pressed". */
+export const PRESS_EVENTS = new Set(["initialPress", "shortRelease", "longPress", "multiPressComplete"]);

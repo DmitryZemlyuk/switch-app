@@ -1,6 +1,6 @@
 import SwiftUI
 
-private enum Palette {
+enum Palette {
     static let plugOn = Color(red: 0x00 / 255, green: 0x60 / 255, blue: 0xC7 / 255)
     static let lightOn = Color(red: 0xA8 / 255, green: 0x5A / 255, blue: 0x00 / 255)
     static let accent = Color(red: 0x00 / 255, green: 0x7A / 255, blue: 0xFF / 255)
@@ -11,6 +11,10 @@ private enum Palette {
 
     static func chip(_ scheme: ColorScheme) -> Color {
         scheme == .dark ? Color.white.opacity(0.10) : Color.black.opacity(0.06)
+    }
+
+    static func segmentOn(_ scheme: ColorScheme) -> Color {
+        scheme == .dark ? Color.white.opacity(0.18) : Color.white
     }
 }
 
@@ -36,33 +40,35 @@ struct PopoverView: View {
 struct MainView: View {
     @EnvironmentObject var model: AppModel
     @EnvironmentObject var l10n: L10n
-    @Environment(\.colorScheme) private var scheme
 
     private let columns = [GridItem(.flexible(), spacing: 10), GridItem(.flexible(), spacing: 10)]
 
+    private var hasItems: Bool {
+        model.tab == .plugs ? !model.devices.isEmpty : !model.sensors.isEmpty
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            HStack(alignment: .center) {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(l10n.t("header"))
-                        .font(.system(size: 13, weight: .semibold))
-                    StatusLine()
-                }
-                Spacer(minLength: 8)
-                if !model.devices.isEmpty && model.connection != .nodeMissing {
-                    Button {
-                        model.editing.toggle()
-                    } label: {
-                        // Both titles take part in layout, so the pill keeps one width when the title flips.
-                        ZStack {
-                            Text(l10n.t("edit")).hidden()
-                            Text(l10n.t("done")).hidden()
-                            Text(model.editing ? l10n.t("done") : l10n.t("edit"))
+            VStack(alignment: .leading, spacing: 8) {
+                HStack(alignment: .center) {
+                    TabSwitcher()
+                    Spacer(minLength: 8)
+                    if hasItems && model.connection != .nodeMissing {
+                        Button {
+                            model.editing.toggle()
+                        } label: {
+                            // Both titles take part in layout, so the pill keeps one width when the title flips.
+                            ZStack {
+                                Text(l10n.t("edit")).hidden()
+                                Text(l10n.t("done")).hidden()
+                                Text(model.editing ? l10n.t("done") : l10n.t("edit"))
+                            }
                         }
+                        .buttonStyle(PillButtonStyle(prominent: model.editing))
+                        .noFocusRing()
                     }
-                    .buttonStyle(PillButtonStyle(prominent: model.editing))
-                    .noFocusRing()
                 }
+                StatusLine()
             }
 
             if model.connection == .nodeMissing {
@@ -73,37 +79,10 @@ struct MainView: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
                 Link("nodejs.org", destination: URL(string: "https://nodejs.org/")!)
                     .font(.system(size: 12))
-            } else if model.devices.isEmpty {
-                Text(model.devicesLoaded ? l10n.t("devices.none") : l10n.t("devices.loading"))
-                    .font(.system(size: 12))
-                    .foregroundStyle(.secondary)
-                    .frame(maxWidth: .infinity, minHeight: 80)
-            } else if model.editing {
-                VStack(spacing: 10) {
-                    ForEach(model.devices) { device in
-                        EditCard(device: device)
-                    }
-                }
-            } else if model.visibleDevices.isEmpty {
-                Text(l10n.t("devices.allHidden"))
-                    .font(.system(size: 12))
-                    .foregroundStyle(.secondary)
-                    .multilineTextAlignment(.center)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .frame(maxWidth: .infinity, minHeight: 80)
+            } else if model.tab == .plugs {
+                plugsContent
             } else {
-                LazyVGrid(columns: columns, spacing: 10) {
-                    ForEach(model.visibleDevices) { device in
-                        TileView(
-                            device: device,
-                            name: model.displayName(for: device),
-                            icon: model.icon(for: device),
-                            enabled: model.canControl && device.reachable
-                        ) {
-                            model.toggle(device)
-                        }
-                    }
-                }
+                SensorsContent()
             }
 
             if let key = model.errorKey {
@@ -113,6 +92,96 @@ struct MainView: View {
                     .fixedSize(horizontal: false, vertical: true)
             }
         }
+    }
+
+    @ViewBuilder
+    private var plugsContent: some View {
+        if model.devices.isEmpty {
+            PlaceholderText(model.devicesLoaded ? l10n.t("devices.none") : l10n.t("devices.loading"))
+        } else if model.editing {
+            VStack(spacing: 10) {
+                ForEach(model.devices) { device in
+                    EditCard(device: device)
+                }
+            }
+        } else if model.visibleDevices.isEmpty {
+            PlaceholderText(l10n.t("devices.allHidden"))
+        } else {
+            LazyVGrid(columns: columns, spacing: 10) {
+                ForEach(model.visibleDevices) { device in
+                    TileView(
+                        device: device,
+                        name: model.displayName(for: device),
+                        icon: model.icon(for: device),
+                        enabled: model.canControl && device.reachable
+                    ) {
+                        model.toggle(device)
+                    }
+                }
+            }
+        }
+    }
+}
+
+struct PlaceholderText: View {
+    let text: String
+
+    init(_ text: String) { self.text = text }
+
+    var body: some View {
+        Text(text)
+            .font(.system(size: 12))
+            .foregroundStyle(.secondary)
+            .multilineTextAlignment(.center)
+            .fixedSize(horizontal: false, vertical: true)
+            .frame(maxWidth: .infinity, minHeight: 80)
+    }
+}
+
+/// "Plugs | Sensors" segmented switch with an attention dot on the sensors tab.
+struct TabSwitcher: View {
+    @EnvironmentObject var model: AppModel
+    @EnvironmentObject var l10n: L10n
+    @Environment(\.colorScheme) private var scheme
+
+    var body: some View {
+        HStack(spacing: 0) {
+            segment(.plugs, title: l10n.t("tab.plugs"), dot: nil)
+            segment(.sensors, title: l10n.t("tab.sensors"), dot: model.needsAttention ? attentionColor : nil)
+        }
+        .padding(2)
+        .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(Palette.chip(scheme)))
+    }
+
+    private var attentionColor: Color {
+        model.anyLeak ? .red : .orange
+    }
+
+    private func segment(_ tab: Tab, title: String, dot: Color?) -> some View {
+        let selected = model.tab == tab
+        return Button {
+            model.tab = tab
+        } label: {
+            HStack(spacing: 5) {
+                Text(title)
+                if let dot {
+                    Circle().fill(dot).frame(width: 6, height: 6)
+                }
+            }
+            .font(.system(size: 12, weight: .medium))
+            .padding(.horizontal, 12)
+            .frame(height: 24)
+            .foregroundStyle(Color.primary)
+            .background(
+                RoundedRectangle(cornerRadius: 6, style: .continuous)
+                    .fill(selected ? Palette.segmentOn(scheme) : Color.clear)
+                    .shadow(color: .black.opacity(selected ? 0.15 : 0), radius: 1, y: 1)
+            )
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .noFocusRing()
+        .accessibilityAddTraits(selected ? .isSelected : [])
     }
 }
 
