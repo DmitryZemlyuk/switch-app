@@ -18,7 +18,19 @@ import {
   sensorTypeFor, batteryFrom, CLUSTER, PRESS_EVENTS,
 } from "./lib.mjs";
 
-Logger.destinations.default.write = (text) => process.stderr.write(text + "\n");
+// Short network drops (Mac asleep, Wi-Fi switching) make every UDP socket report these; matter.js recovers by itself.
+const NETWORK_NOISE = /recvmsg (EHOSTUNREACH|ENETUNREACH|ENETDOWN|EADDRNOTAVAIL)/;
+Logger.destinations.default.write = (text) => {
+  if (NETWORK_NOISE.test(text)) return;
+  process.stderr.write(text + "\n");
+};
+
+// Node warns that node:sqlite (matter.js storage) is experimental on every start: keep other warnings only.
+process.removeAllListeners("warning");
+process.on("warning", (warning) => {
+  if (warning.name === "ExperimentalWarning" && /sqlite/i.test(warning.message)) return;
+  process.stderr.write(`${warning.name}: ${warning.message}\n`);
+});
 Logger.level = process.env.SWITCH_DEBUG ? "debug" : "notice";
 
 // Passed via the environment: matter.js reads its own settings from command-line arguments.
