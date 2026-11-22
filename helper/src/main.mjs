@@ -5,7 +5,7 @@
 //   stdin  (app → helper): {"cmd":"pair","code":"…"} | {"cmd":"set","id":"3","on":true} | {"cmd":"unpair"} | {"cmd":"refresh"}
 //   stdout (helper → app): {"ev":"state","state":"…"} | {"ev":"devices","devices":[…]} | {"ev":"update","id":"3","on":true}
 //                          {"ev":"sensors","sensors":[…]} | {"ev":"press","id":"7"}
-//                          {"ev":"power","id":"8","watts":38.2} | {"ev":"power","id":"8","energyWh":12345.6}
+//                          {"ev":"power","id":"8","watts":38.2}
 //                          {"ev":"error","code":"…","message":"…"}
 // All matter.js logging goes to stderr so stdout stays a clean protocol channel.
 
@@ -14,12 +14,12 @@ import { Environment, Logger } from "@matter/main";
 import { ManualPairingCodeCodec, QrPairingCodeCodec } from "@matter/main/types";
 import {
   GeneralCommissioning, OnOff, BridgedDeviceBasicInformation, BooleanState, OccupancySensing, PowerSource,
-  ElectricalPowerMeasurement, ElectricalEnergyMeasurement,
+  ElectricalPowerMeasurement,
 } from "@matter/main/clusters";
 import { CommissioningController } from "@project-chip/matter.js";
 import {
   kindForDeviceTypes, normalizePairingCode, connectionStateName, parseCommand,
-  sensorTypeFor, batteryFrom, CLUSTER, PRESS_EVENTS, wattsFrom, energyWhFrom,
+  sensorTypeFor, batteryFrom, CLUSTER, PRESS_EVENTS, wattsFrom,
 } from "./lib.mjs";
 
 // Short network drops (Mac asleep, Wi-Fi switching) make every UDP socket report these; matter.js recovers by itself.
@@ -85,12 +85,15 @@ async function readBattery(ep) {
   return batteryFrom(percentRaw, level);
 }
 
-async function readMetering(ep) {
-  let watts = null;
-  let energyWh = null;
-  try { watts = wattsFrom(await ep.getClusterClient(ElectricalPowerMeasurement.Cluster)?.getActivePowerAttribute(false)); } catch {}
-  try { energyWh = energyWhFrom(await ep.getClusterClient(ElectricalEnergyMeasurement.Cluster)?.getCumulativeEnergyImportedAttribute?.(false)); } catch {}
-  return { watts, energyWh };
+/** Watts for a plug with a power meter (0 when the meter has no value yet), null for one without. */
+async function readWatts(ep) {
+  const meter = ep.getClusterClient(ElectricalPowerMeasurement.Cluster);
+  if (!meter) return null;
+  try {
+    return wattsFrom(await meter.getActivePowerAttribute(false)) ?? 0;
+  } catch {
+    return 0;
+  }
 }
 
 async function readActive(ep, type) {
@@ -134,8 +137,8 @@ async function collectDevices() {
       let on = false;
       try { on = !!(await onOff.getOnOffAttribute(false)); } catch {}
       const { label, reachable } = await readLabel(ep);
-      const { watts, energyWh } = await readMetering(ep);
-      plugs.push({ id, label, on, reachable, kind: kindForDeviceTypes(types), watts, energyWh });
+      const watts = await readWatts(ep);
+      plugs.push({ id, label, on, reachable, kind: kindForDeviceTypes(types), watts });
     } else if (number !== 0) {
       const type = sensorTypeFor(types, clusterIds);
       if (type) {
@@ -187,9 +190,6 @@ async function attachNode(nodeId) {
     } else if (path.clusterId === CLUSTER.POWER_MEASUREMENT && path.attributeName === "activePower") {
       // Some plugs report null instead of 0 when switched off.
       send({ ev: "power", id: String(path.endpointId), watts: wattsFrom(value) ?? 0 });
-    } else if (path.clusterId === CLUSTER.ENERGY_MEASUREMENT && path.attributeName === "cumulativeEnergyImported") {
-      const energyWh = energyWhFrom(value);
-      if (energyWh !== null) send({ ev: "power", id: String(path.endpointId), energyWh });
     } else if (path.clusterId === CLUSTER.BOOLEAN_STATE || path.clusterId === CLUSTER.OCCUPANCY ||
                (path.clusterId === CLUSTER.POWER_SOURCE && String(path.attributeName).startsWith("bat"))) {
       scheduleCollect();

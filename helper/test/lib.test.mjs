@@ -62,7 +62,7 @@ test("press events", () => {
   assert.ok(!PRESS_EVENTS.has("longRelease"));
 });
 
-import { wattsFrom, energyWhFrom } from "../src/lib.mjs";
+import { wattsFrom } from "../src/lib.mjs";
 
 test("metering", () => {
   assert.equal(wattsFrom(38240), 38.2);
@@ -70,8 +70,4 @@ test("metering", () => {
   assert.equal(wattsFrom(-1500), 1.5);
   assert.equal(wattsFrom(0), 0);
   assert.equal(wattsFrom(null), null);
-  assert.equal(energyWhFrom({ energy: 12345678n }), 12345.678);
-  assert.equal(energyWhFrom({ energy: 0 }), 0);
-  assert.equal(energyWhFrom(null), null);
-  assert.equal(energyWhFrom({ energy: -5 }), null);
 });

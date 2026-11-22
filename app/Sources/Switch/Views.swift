@@ -288,10 +288,6 @@ struct TileView: View {
 
     private var status: String {
         if !device.reachable { return l10n.t("state.unreachable") }
-        if let wh = device.energyWh {
-            // Lifetime total, exactly as the plug's counter reports it.
-            return "\(isOn ? l10n.t("state.onShort") : l10n.t("state.offShort")) · \(l10n.kWh(wh / 1000))"
-        }
         return isOn ? l10n.t("state.on") : l10n.t("state.off")
     }
 

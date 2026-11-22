@@ -16,7 +16,6 @@ struct Device: Identifiable, Equatable {
     var reachable: Bool
     var kind: IconKind
     var watts: Double? // nil when the device has no power meter
-    var energyWh: Double? // lifetime counter as the plug reports it; nil without one
 }
 
 enum SensorType: String {
@@ -237,7 +236,7 @@ final class AppModel: ObservableObject {
         case "devices":
             devices = (event.devices ?? []).map {
                 Device(id: $0.id, label: $0.label ?? "", on: $0.on, reachable: $0.reachable ?? true,
-                       kind: IconKind(rawValue: $0.kind ?? "") ?? .plug, watts: $0.watts, energyWh: $0.energyWh)
+                       kind: IconKind(rawValue: $0.kind ?? "") ?? .plug, watts: $0.watts)
             }
             devicesLoaded = true
             if devices.isEmpty { editing = false }
@@ -259,7 +258,6 @@ final class AppModel: ObservableObject {
         case "power":
             guard let id = event.id, let index = devices.firstIndex(where: { $0.id == id }) else { break }
             if let watts = event.watts, devices[index].watts != watts { devices[index].watts = watts }
-            if let wh = event.energyWh, devices[index].energyWh != wh { devices[index].energyWh = wh }
         case "press":
             if let id = event.id { recordEvent(id) }
         case "update":

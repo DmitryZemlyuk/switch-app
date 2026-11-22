@@ -9,7 +9,6 @@ struct HelperEvent: Decodable {
         let reachable: Bool?
         let kind: String?
         let watts: Double?
-        let energyWh: Double?
     }
 
     struct RawBattery: Decodable {
@@ -35,7 +34,6 @@ struct HelperEvent: Decodable {
     let code: String?
     let message: String?
     let watts: Double?
-    let energyWh: Double?
 }
 
 /// Runs the matter.js helper with the Node.js installed on this Mac and exchanges JSON lines with it.

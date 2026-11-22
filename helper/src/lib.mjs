@@ -61,7 +61,7 @@ export function parseCommand(line) {
 // Matter cluster ids used for sensors.
 export const CLUSTER = {
   BOOLEAN_STATE: 0x0045, OCCUPANCY: 0x0406, SWITCH: 0x003b, POWER_SOURCE: 0x002f,
-  POWER_MEASUREMENT: 0x0090, ENERGY_MEASUREMENT: 0x0091,
+  POWER_MEASUREMENT: 0x0090,
 };
 
 const SENSOR_DEVICE_TYPES = new Map([
@@ -108,12 +108,4 @@ export function wattsFrom(milliwatts) {
   const value = Number(milliwatts);
   if (!Number.isFinite(value)) return null;
   return Math.round(Math.abs(value) / 100) / 10; // one decimal
-}
-
-/** ElectricalEnergyMeasurement.cumulativeEnergyImported is { energy: mWh, … } or null. Returns watt-hours or null. */
-export function energyWhFrom(measurement) {
-  if (!measurement || measurement.energy === null || measurement.energy === undefined) return null;
-  const value = Number(measurement.energy);
-  if (!Number.isFinite(value) || value < 0) return null;
-  return value / 1000;
 }
