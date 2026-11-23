@@ -10,7 +10,8 @@ permissions:
 
 jobs:
   macos:
-    runs-on: macos-15
+    # Intel runner: GitHub's Apple silicon macOS runners are often short on capacity; the app is still built for arm64.
+    runs-on: macos-15-intel
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-node@v5
