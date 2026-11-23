@@ -317,6 +317,7 @@ final class AppModel: ObservableObject {
         case "start_failed":
             connection = .helperFailed
         case "identify_failed":
+            identifying.removeAll() // nothing is blinking: don't keep saying so
             show(errorKey: "err.identify_failed")
         case "bad_code", "pair_failed", "set_failed", "already_paired":
             show(errorKey: "err.\(code)")
