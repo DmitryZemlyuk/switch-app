@@ -85,6 +85,32 @@ async function readBattery(ep) {
   return batteryFrom(percentRaw, level);
 }
 
+const METER_FIELDS = ["voltage", "rmsVoltage", "activeCurrent", "rmsCurrent", "frequency", "powerFactor", "activePower"];
+
+/** One diagnostic log line: which values the plug's power meter really answers (read from the plug itself). */
+async function describeMeter(ep) {
+  const meter = ep.getClusterClient(ElectricalPowerMeasurement.Cluster);
+  if (!meter) return `  endpoint ${ep.getNumber()}: no power meter`;
+  const parts = [];
+  try {
+    const list = await meter.getAttributeListAttribute?.(true);
+    if (list) parts.push(`attributeList [${list.map((id) => "0x" + Number(id).toString(16).padStart(4, "0")).join(", ")}]`);
+  } catch (error) {
+    parts.push(`attributeList ? (${error?.message ?? error})`);
+  }
+  for (const field of METER_FIELDS) {
+    const getter = meter[`get${field[0].toUpperCase()}${field.slice(1)}Attribute`];
+    if (typeof getter !== "function") continue;
+    try {
+      const value = await getter.call(meter, true);
+      parts.push(`${field}=${value === null || value === undefined ? "null" : String(value)}`);
+    } catch (error) {
+      parts.push(`${field}=unsupported`);
+    }
+  }
+  return `  endpoint ${ep.getNumber()}: ${parts.join(" ")}`;
+}
+
 /** Watts for a plug with a power meter (0 when the meter has no value yet), null for one without. */
 async function readWatts(ep) {
   const meter = ep.getClusterClient(ElectricalPowerMeasurement.Cluster);
@@ -116,6 +142,7 @@ async function collectDevices() {
   const seen = new Set();
   switches.clear();
   const logLines = [];
+  const meterEndpoints = [];
 
   const walk = async (ep) => {
     const number = ep.getNumber();
@@ -139,6 +166,7 @@ async function collectDevices() {
       const { label, reachable } = await readLabel(ep);
       const watts = await readWatts(ep);
       plugs.push({ id, label, on, reachable, kind: kindForDeviceTypes(types), watts });
+      if (!structureLogged) meterEndpoints.push(ep);
     } else if (number !== 0) {
       const type = sensorTypeFor(types, clusterIds);
       if (type) {
@@ -160,6 +188,14 @@ async function collectDevices() {
   if (!structureLogged && seen.size > 0) {
     structureLogged = true;
     process.stderr.write(`hub structure (${seen.size} endpoints):\n${logLines.join("\n")}\n`);
+    // Asking the plugs directly takes a moment: do it after the tiles are out.
+    if (meterEndpoints.length > 0) {
+      (async () => {
+        const lines = [];
+        for (const ep of meterEndpoints) lines.push(await describeMeter(ep));
+        process.stderr.write(`power meters:\n${lines.join("\n")}\n`);
+      })().catch((error) => process.stderr.write(`power meter check failed: ${error?.message ?? error}\n`));
+    }
   }
   const byId = (a, b) => Number(a.id) - Number(b.id);
   send({ ev: "devices", devices: plugs.sort(byId) });
