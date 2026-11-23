@@ -50,6 +50,8 @@ export function parseCommand(line) {
       return typeof msg.code === "string" ? { cmd: "pair", code: msg.code } : null;
     case "set":
       return typeof msg.id === "string" && typeof msg.on === "boolean" ? { cmd: "set", id: msg.id, on: msg.on } : null;
+    case "identify":
+      return typeof msg.id === "string" ? { cmd: "identify", id: msg.id } : null;
     case "unpair":
     case "refresh":
       return { cmd: msg.cmd };
@@ -99,8 +101,69 @@ export function batteryFrom(percentRaw, chargeLevel) {
   return { percent, level };
 }
 
-/** Switch cluster events that mean "the button was pressed". */
-export const PRESS_EVENTS = new Set(["initialPress", "shortRelease", "longPress", "multiPressComplete"]);
+/**
+ * Turns Matter Switch-cluster events into one result per gesture: single, double, long or multi (3+ presses).
+ *
+ * A double press arrives as initialPress, shortRelease, initialPress, shortRelease, multiPressComplete(2), and a
+ * single one ends with multiPressComplete(1) – but only on buttons that support multi-press. So a release waits a
+ * moment for multiPressComplete and falls back to "single" if none comes. A long press reports at once; its
+ * release is ignored.
+ */
+export class PressClassifier {
+  constructor(onGesture, { releaseWaitMs = 1200, pressFallbackMs = 2500, setTimer = setTimeout, clearTimer = clearTimeout } = {}) {
+    this.onGesture = onGesture;
+    this.releaseWaitMs = releaseWaitMs;
+    this.pressFallbackMs = pressFallbackMs;
+    this.setTimer = setTimer;
+    this.clearTimer = clearTimer;
+    this.pending = new Map(); // id → { timer, holding }
+  }
+
+  handle(id, eventName, data) {
+    const state = this.pending.get(id);
+    switch (eventName) {
+      case "initialPress":
+        if (state?.holding) return;
+        this.#wait(id, this.pressFallbackMs);
+        return;
+      case "shortRelease":
+        if (state?.holding) return;
+        this.#wait(id, this.releaseWaitMs);
+        return;
+      case "longPress":
+        this.#clear(id);
+        this.pending.set(id, { holding: true, timer: null });
+        this.onGesture(id, "long", 1);
+        return;
+      case "longRelease":
+        this.#clear(id);
+        return;
+      case "multiPressComplete": {
+        this.#clear(id);
+        const count = Number(data?.totalNumberOfPressesCounted ?? 1) || 1;
+        this.onGesture(id, count === 1 ? "single" : count === 2 ? "double" : "multi", count);
+        return;
+      }
+      default:
+        return; // multiPressOngoing, switchLatched: nothing to report
+    }
+  }
+
+  #wait(id, ms) {
+    this.#clear(id);
+    const timer = this.setTimer(() => {
+      this.pending.delete(id);
+      this.onGesture(id, "single", 1);
+    }, ms);
+    this.pending.set(id, { holding: false, timer });
+  }
+
+  #clear(id) {
+    const state = this.pending.get(id);
+    if (state?.timer) this.clearTimer(state.timer);
+    this.pending.delete(id);
+  }
+}
 
 /** ElectricalPowerMeasurement.activePower is in milliwatts (int64, may arrive as bigint). Returns watts or null. */
 export function wattsFrom(milliwatts) {

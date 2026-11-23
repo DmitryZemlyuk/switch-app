@@ -9,6 +9,8 @@ struct HelperEvent: Decodable {
         let reachable: Bool?
         let kind: String?
         let watts: Double?
+    let kind: String?
+    let count: Int?
     }
 
     struct RawBattery: Decodable {

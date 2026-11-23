@@ -32,11 +32,13 @@ test("commands", () => {
   assert.equal(parseCommand('{"cmd":"set","id":3,"on":true}'), null);
   assert.deepEqual(parseCommand('{"cmd":"pair","code":"x"}'), { cmd: "pair", code: "x" });
   assert.deepEqual(parseCommand('{"cmd":"unpair"}'), { cmd: "unpair" });
+  assert.deepEqual(parseCommand('{"cmd":"identify","id":"6"}'), { cmd: "identify", id: "6" });
+  assert.equal(parseCommand('{"cmd":"identify"}'), null);
   assert.equal(parseCommand("nope"), null);
   assert.equal(parseCommand('{"cmd":"rm"}'), null);
 });
 
-import { sensorTypeFor, batteryFrom, PRESS_EVENTS } from "../src/lib.mjs";
+import { sensorTypeFor, batteryFrom, PressClassifier } from "../src/lib.mjs";
 
 test("sensor types", () => {
   assert.equal(sensorTypeFor([0x0013, 0x0043], [0x0045]), "leak");
@@ -57,9 +59,90 @@ test("battery", () => {
   assert.equal(batteryFrom(255, 7), null);
 });
 
-test("press events", () => {
-  assert.ok(PRESS_EVENTS.has("multiPressComplete"));
-  assert.ok(!PRESS_EVENTS.has("longRelease"));
+function fakeTimers() {
+  let now = 0;
+  const timers = new Map();
+  let next = 1;
+  return {
+    setTimer: (fn, ms) => { const id = next++; timers.set(id, { fn, at: now + ms }); return id; },
+    clearTimer: (id) => timers.delete(id),
+    advance(ms) {
+      now += ms;
+      for (const [id, t] of [...timers]) if (t.at <= now) { timers.delete(id); t.fn(); }
+    },
+    get count() { return timers.size; },
+  };
+}
+
+function classifier() {
+  const timers = fakeTimers();
+  const out = [];
+  const c = new PressClassifier((id, kind, count) => out.push(`${id}:${kind}:${count}`), timers);
+  return { c, out, timers };
+}
+
+test("single press with multi-press support", () => {
+  const { c, out, timers } = classifier();
+  c.handle("4", "initialPress");
+  c.handle("4", "shortRelease");
+  c.handle("4", "multiPressComplete", { totalNumberOfPressesCounted: 1 });
+  timers.advance(5000);
+  assert.deepEqual(out, ["4:single:1"]);
+  assert.equal(timers.count, 0);
+});
+
+test("double press", () => {
+  const { c, out, timers } = classifier();
+  for (const e of ["initialPress", "shortRelease", "initialPress", "multiPressOngoing", "shortRelease"]) c.handle("4", e);
+  timers.advance(500);
+  c.handle("4", "multiPressComplete", { totalNumberOfPressesCounted: 2 });
+  timers.advance(5000);
+  assert.deepEqual(out, ["4:double:2"]);
+});
+
+test("triple press", () => {
+  const { c, out } = classifier();
+  c.handle("4", "multiPressComplete", { totalNumberOfPressesCounted: 3 });
+  assert.deepEqual(out, ["4:multi:3"]);
+});
+
+test("single press without multi-press support falls back after the release", () => {
+  const { c, out, timers } = classifier();
+  c.handle("4", "initialPress");
+  c.handle("4", "shortRelease");
+  timers.advance(1199);
+  assert.deepEqual(out, []);
+  timers.advance(1);
+  assert.deepEqual(out, ["4:single:1"]);
+});
+
+test("only initialPress still reports a press", () => {
+  const { c, out, timers } = classifier();
+  c.handle("4", "initialPress");
+  timers.advance(2500);
+  assert.deepEqual(out, ["4:single:1"]);
+});
+
+test("long press reports once and ignores its release", () => {
+  const { c, out, timers } = classifier();
+  c.handle("4", "initialPress");
+  c.handle("4", "longPress");
+  c.handle("4", "shortRelease");
+  c.handle("4", "longRelease");
+  timers.advance(5000);
+  assert.deepEqual(out, ["4:long:1"]);
+  c.handle("4", "initialPress");
+  c.handle("4", "shortRelease");
+  timers.advance(1200);
+  assert.deepEqual(out, ["4:long:1", "4:single:1"]);
+});
+
+test("buttons are tracked separately", () => {
+  const { c, out, timers } = classifier();
+  c.handle("4", "initialPress");
+  c.handle("5", "multiPressComplete", { totalNumberOfPressesCounted: 2 });
+  timers.advance(2500);
+  assert.deepEqual(out, ["5:double:2", "4:single:1"]);
 });
 
 import { wattsFrom } from "../src/lib.mjs";

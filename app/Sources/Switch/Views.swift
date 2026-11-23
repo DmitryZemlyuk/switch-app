@@ -315,9 +315,13 @@ struct EditCard: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text(l10n.t("edit.name"))
-                .font(.system(size: 11))
-                .foregroundStyle(.secondary)
+            HStack {
+                Text(l10n.t("edit.name"))
+                    .font(.system(size: 11))
+                    .foregroundStyle(.secondary)
+                Spacer()
+                IdentifyButton(id: device.id)
+            }
             TextField(
                 model.defaultName(for: device),
                 text: Binding(

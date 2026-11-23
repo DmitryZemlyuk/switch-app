@@ -66,6 +66,10 @@ final class AppModel: ObservableObject {
     @Published private(set) var sensorsLoaded = false
     /// Last motion seen / last button press, per sensor id. Kept across launches.
     @Published private(set) var lastEvent: [String: Date] = [:]
+    /// What the last button press was: "single", "double", "long" or "multi:<count>".
+    @Published private(set) var lastPress: [String: String] = [:]
+    /// Devices currently blinking after "Identify".
+    @Published private(set) var identifying: Set<String> = []
     @Published var tab: Tab = .plugs {
         didSet {
             if tab != oldValue { editing = false }
@@ -77,6 +81,7 @@ final class AppModel: ObservableObject {
     private var errorClearTask: Task<Void, Never>?
     private static let customKey = "customizations"
     private static let eventsKey = "sensorEvents"
+    private static let pressKey = "lastPress"
     private static let maxNameLength = 24
 
     init() {
@@ -89,6 +94,7 @@ final class AppModel: ObservableObject {
             lastEvent = saved.mapValues { Date(timeIntervalSince1970: $0) }
         }
         tab = Tab(rawValue: UserDefaults.standard.string(forKey: "tab") ?? "") ?? .plugs
+        lastPress = UserDefaults.standard.dictionary(forKey: Self.pressKey) as? [String: String] ?? [:]
         helper.onEvent = { [weak self] event in self?.handle(event) }
         helper.onCrash = { [weak self] in
             guard let self, self.connection != .unpaired else { return }
@@ -227,6 +233,17 @@ final class AppModel: ObservableObject {
         helper.send(["cmd": "refresh"])
     }
 
+    /// Makes the device blink for a few seconds so it can be found.
+    func identify(id: String) {
+        guard canControl, !identifying.contains(id) else { return }
+        identifying.insert(id)
+        helper.send(["cmd": "identify", "id": id])
+        Task { @MainActor [weak self] in
+            try? await Task.sleep(nanoseconds: 10_000_000_000)
+            self?.identifying.remove(id)
+        }
+    }
+
     // MARK: - Helper events
 
     private func handle(_ event: HelperEvent) {
@@ -259,7 +276,11 @@ final class AppModel: ObservableObject {
             guard let id = event.id, let index = devices.firstIndex(where: { $0.id == id }) else { break }
             if let watts = event.watts, devices[index].watts != watts { devices[index].watts = watts }
         case "press":
-            if let id = event.id { recordEvent(id) }
+            guard let id = event.id else { break }
+            let kind = event.kind ?? "single"
+            lastPress[id] = kind == "multi" ? "multi:\(max(3, event.count ?? 3))" : kind
+            UserDefaults.standard.set(lastPress, forKey: Self.pressKey)
+            recordEvent(id)
         case "update":
             if let id = event.id, let on = event.on, let index = devices.firstIndex(where: { $0.id == id }) {
                 devices[index].on = on
@@ -295,6 +316,8 @@ final class AppModel: ObservableObject {
         switch code {
         case "start_failed":
             connection = .helperFailed
+        case "identify_failed":
+            show(errorKey: "err.identify_failed")
         case "bad_code", "pair_failed", "set_failed", "already_paired":
             show(errorKey: "err.\(code)")
             // These errors arrive without a state change: ask the helper where it really is.

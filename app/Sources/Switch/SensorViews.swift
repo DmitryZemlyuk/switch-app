@@ -109,8 +109,18 @@ struct SensorRow: View {
             if let date = model.lastEvent[sensor.id] { return l10n.t("motion.ago", l10n.relative(date, now: now)) }
             return l10n.t("motion.none")
         case .button:
-            if let date = model.lastEvent[sensor.id] { return l10n.t("button.ago", l10n.relative(date, now: now)) }
-            return l10n.t("button.none")
+            guard let date = model.lastEvent[sensor.id] else { return l10n.t("button.none") }
+            let when = l10n.relative(date, now: now)
+            let kind = model.lastPress[sensor.id] ?? "single"
+            switch kind {
+            case "double": return l10n.t("press.double", when)
+            case "long": return l10n.t("press.long", when)
+            default:
+                if kind.hasPrefix("multi:"), let count = Int(kind.dropFirst(6)) {
+                    return l10n.t("press.multi", when).replacingOccurrences(of: "%d", with: String(count))
+                }
+                return l10n.t("button.ago", when)
+            }
         case .contact:
             return sensor.active ? l10n.t("contact.closed") : l10n.t("contact.open")
         }
@@ -186,9 +196,13 @@ struct SensorEditCard: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text(l10n.t("edit.name"))
-                .font(.system(size: 11))
-                .foregroundStyle(.secondary)
+            HStack {
+                Text(l10n.t("edit.name"))
+                    .font(.system(size: 11))
+                    .foregroundStyle(.secondary)
+                Spacer()
+                IdentifyButton(id: sensor.id)
+            }
             TextField(
                 model.defaultName(for: sensor),
                 text: Binding(
@@ -212,5 +226,28 @@ struct SensorEditCard: View {
         }
         .padding(12)
         .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(Palette.tileOff(scheme)))
+    }
+}
+
+/// Small "Identify" link-style button: the device blinks for a few seconds.
+struct IdentifyButton: View {
+    let id: String
+
+    @EnvironmentObject var model: AppModel
+    @EnvironmentObject var l10n: L10n
+
+    var body: some View {
+        let active = model.identifying.contains(id)
+        Button {
+            model.identify(id: id)
+        } label: {
+            Label(active ? l10n.t("identify.active") : l10n.t("identify"),
+                  systemImage: "dot.radiowaves.left.and.right")
+                .font(.system(size: 11, weight: .medium))
+                .labelStyle(.titleAndIcon)
+        }
+        .buttonStyle(.borderless)
+        .foregroundStyle(active ? Color.secondary : Palette.accent)
+        .disabled(active || !model.canControl)
     }
 }

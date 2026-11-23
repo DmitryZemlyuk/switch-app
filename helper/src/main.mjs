@@ -3,8 +3,9 @@
 // The app starts this process with the Mac's own Node.js (storage folder in SWITCH_STORAGE_DIR)
 // and talks to it with JSON lines:
 //   stdin  (app → helper): {"cmd":"pair","code":"…"} | {"cmd":"set","id":"3","on":true} | {"cmd":"unpair"} | {"cmd":"refresh"}
+//                          {"cmd":"identify","id":"6"}
 //   stdout (helper → app): {"ev":"state","state":"…"} | {"ev":"devices","devices":[…]} | {"ev":"update","id":"3","on":true}
-//                          {"ev":"sensors","sensors":[…]} | {"ev":"press","id":"7"}
+//                          {"ev":"sensors","sensors":[…]} | {"ev":"press","id":"4","kind":"double","count":2}
 //                          {"ev":"power","id":"8","watts":38.2}
 //                          {"ev":"error","code":"…","message":"…"}
 // All matter.js logging goes to stderr so stdout stays a clean protocol channel.
@@ -14,12 +15,12 @@ import { Environment, Logger } from "@matter/main";
 import { ManualPairingCodeCodec, QrPairingCodeCodec } from "@matter/main/types";
 import {
   GeneralCommissioning, OnOff, BridgedDeviceBasicInformation, BooleanState, OccupancySensing, PowerSource,
-  ElectricalPowerMeasurement,
+  ElectricalPowerMeasurement, Identify,
 } from "@matter/main/clusters";
 import { CommissioningController } from "@project-chip/matter.js";
 import {
   kindForDeviceTypes, normalizePairingCode, connectionStateName, parseCommand,
-  sensorTypeFor, batteryFrom, CLUSTER, PRESS_EVENTS, wattsFrom,
+  sensorTypeFor, batteryFrom, CLUSTER, PressClassifier, wattsFrom,
 } from "./lib.mjs";
 
 // Short network drops (Mac asleep, Wi-Fi switching) make every UDP socket report these; matter.js recovers by itself.
@@ -60,6 +61,8 @@ const controller = new CommissioningController({
 let node; // PairedNode of the hub
 let busy = false; // pairing or unpairing in progress
 const switches = new Map(); // endpoint id → OnOff cluster client
+const endpoints = new Map(); // endpoint id → Endpoint, for Identify
+const presses = new PressClassifier((id, kind, count) => send({ ev: "press", id, kind, count }));
 
 let structureLogged = false;
 
@@ -141,6 +144,7 @@ async function collectDevices() {
   const sensors = [];
   const seen = new Set();
   switches.clear();
+  endpoints.clear();
   const logLines = [];
   const meterEndpoints = [];
 
@@ -148,6 +152,7 @@ async function collectDevices() {
     const number = ep.getNumber();
     if (seen.has(number)) return;
     seen.add(number);
+    if (number !== 0) endpoints.set(String(number), ep);
     let types = [ep.deviceType];
     try { types = types.concat(ep.getDeviceTypes().map((t) => t.code)); } catch {}
     let clusterIds = [];
@@ -231,14 +236,17 @@ async function attachNode(nodeId) {
       scheduleCollect();
     }
   });
-  node.events.eventTriggered.on(({ path }) => {
-    if (path.clusterId === CLUSTER.SWITCH && PRESS_EVENTS.has(path.eventName)) {
-      send({ ev: "press", id: String(path.endpointId) });
-    }
+  node.events.eventTriggered.on(({ path, events }) => {
+    if (path.clusterId !== CLUSTER.SWITCH) return;
+    const id = String(path.endpointId);
+    // A report can carry several events (e.g. a whole double press): feed them in order.
+    const list = Array.isArray(events) && events.length > 0 ? events : [{ data: undefined }];
+    for (const event of list) presses.handle(id, path.eventName, event?.data);
   });
   node.events.decommissioned.on(() => {
     node = undefined;
     switches.clear();
+    endpoints.clear();
     send({ ev: "devices", devices: [] });
     send({ ev: "sensors", sensors: [] });
     send({ ev: "state", state: "unpaired" });
@@ -321,6 +329,7 @@ async function unpair() {
   } finally {
     node = undefined;
     switches.clear();
+    endpoints.clear();
     busy = false;
     send({ ev: "devices", devices: [] });
     send({ ev: "sensors", sensors: [] });
@@ -345,6 +354,19 @@ async function setSwitch(id, on) {
   }
 }
 
+async function identify(id) {
+  const client = endpoints.get(id)?.getClusterClient(Identify.Cluster);
+  if (!client) {
+    send({ ev: "error", code: "identify_failed", message: `No identify on ${id}` });
+    return;
+  }
+  try {
+    await client.identify({ identifyTime: 10 });
+  } catch (error) {
+    send({ ev: "error", code: "identify_failed", message: String(error?.message ?? error) });
+  }
+}
+
 async function handle(line) {
   const cmd = parseCommand(line);
   if (!cmd) return;
@@ -352,6 +374,7 @@ async function handle(line) {
     case "pair": return pair(cmd.code);
     case "unpair": return unpair();
     case "set": return setSwitch(cmd.id, cmd.on);
+    case "identify": return identify(cmd.id);
     case "refresh":
       if (node) {
         send({ ev: "state", state: connectionStateName(node.connectionState) });
