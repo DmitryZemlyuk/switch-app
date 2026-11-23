@@ -2,7 +2,7 @@
 
 A tiny macOS menu bar app for turning Aqara smart plugs on and off – locally, without the Aqara cloud.
 
-Click the plug icon in the menu bar and you get one tile per plug: tap a tile to toggle it. Tiles show each plug's current power. Plugs can be renamed, shown as a plug or a light, or hidden from the list (handy for the hub's own night light). In edit mode, Identify makes a device blink so you can tell two identical ones apart. A second tab lists the hub's sensors – leak sensors, motion sensor, button – with their state, last motion or press (single, double, long), and battery charge; a dot next to the menu bar icon flags a leak (red) or a low battery (orange). Right-click the icon for the app menu (open at login, language, log, unpair, quit).
+Click the plug icon in the menu bar and you get one tile per plug: tap a tile to toggle it. Tiles show each plug's current power. Plugs can be renamed, shown as a plug or a light, or hidden from the list (handy for the hub's own night light). In edit mode, Identify makes a plug blink so you can tell two identical ones apart (battery sensors don't support it through the hub). A second tab lists the hub's sensors – leak sensors, motion sensor, button – with their state, last motion or press (single, double, long), and battery charge; a dot next to the menu bar icon flags a leak (red) or a low battery (orange). Right-click the icon for the app menu (open at login, language, log, unpair, quit).
 
 ## How it works
 

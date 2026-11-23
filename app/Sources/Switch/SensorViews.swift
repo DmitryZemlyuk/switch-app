@@ -196,13 +196,10 @@ struct SensorEditCard: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            HStack {
-                Text(l10n.t("edit.name"))
-                    .font(.system(size: 11))
-                    .foregroundStyle(.secondary)
-                Spacer()
-                IdentifyButton(id: sensor.id)
-            }
+            // No "Identify" here: battery sensors sleep and the hub doesn't pass the command on to them.
+            Text(l10n.t("edit.name"))
+                .font(.system(size: 11))
+                .foregroundStyle(.secondary)
             TextField(
                 model.defaultName(for: sensor),
                 text: Binding(
