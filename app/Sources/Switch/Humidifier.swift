@@ -98,6 +98,7 @@ enum HumidifierStore {
         return parts.count == 4 && parts.allSatisfy { Int($0).map { (0...255).contains($0) } ?? false }
     }
 
+    @MainActor
     static func displayName(model: String?) -> String {
         switch model {
         case "zhimi.humidifier.ca4": return "Smartmi Evaporative Humidifier 2"
