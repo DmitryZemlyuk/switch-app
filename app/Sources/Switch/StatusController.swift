@@ -34,9 +34,9 @@ final class StatusController: NSObject {
             button.sendAction(on: [.leftMouseUp, .rightMouseUp])
         }
 
-        // Hiding a device changes `custom`, which also decides whether the icon is filled.
-        model.$devices
-            .combineLatest(model.$connection, model.$custom, model.$sensors)
+        // Any model change can affect the icon (plugs on, hidden devices, sensors, humidifier).
+        // objectWillChange fires before the change lands, so update on the next run-loop turn.
+        model.objectWillChange
             .receive(on: RunLoop.main)
             .sink { [weak self] _ in self?.updateIcon() }
             .store(in: &cancellables)
@@ -54,7 +54,7 @@ final class StatusController: NSObject {
         button.appearsDisabled = !(model.connection == .connected || model.connection == .unpaired)
         // A coloured dot next to the plug: red for a leak, orange for a low battery.
         if model.needsAttention {
-            let color: NSColor = model.anyLeak ? .systemRed : .systemOrange
+            let color: NSColor = model.attentionIsAlert ? .systemRed : .systemOrange
             button.attributedTitle = NSAttributedString(string: "●", attributes: [
                 .foregroundColor: color,
                 .font: NSFont.systemFont(ofSize: 7),
@@ -129,6 +129,13 @@ final class StatusController: NSObject {
         log.target = self
         menu.addItem(log)
 
+        if model.humidifierConfigured {
+            menu.addItem(.separator())
+            let forget = NSMenuItem(title: l10n.t("menu.forgetHumidifier"), action: #selector(confirmForgetHumidifier), keyEquivalent: "")
+            forget.target = self
+            menu.addItem(forget)
+        }
+
         if model.connection != .unpaired && model.connection != .pairing {
             menu.addItem(.separator())
             let unpair = NSMenuItem(title: l10n.t("menu.unpair"), action: #selector(confirmUnpair), keyEquivalent: "")
@@ -179,6 +186,19 @@ final class StatusController: NSObject {
         alert.addButton(withTitle: l10n.t("cancel"))
         if alert.runModal() == .alertFirstButtonReturn {
             model.unpair()
+        }
+    }
+
+    @objc private func confirmForgetHumidifier() {
+        NSApp.activate(ignoringOtherApps: true)
+        let alert = NSAlert()
+        alert.messageText = l10n.t("forgetHumidifier.title")
+        alert.informativeText = l10n.t("forgetHumidifier.text")
+        alert.alertStyle = .warning
+        alert.addButton(withTitle: l10n.t("forgetHumidifier.confirm"))
+        alert.addButton(withTitle: l10n.t("cancel"))
+        if alert.runModal() == .alertFirstButtonReturn {
+            model.forgetHumidifier()
         }
     }
 

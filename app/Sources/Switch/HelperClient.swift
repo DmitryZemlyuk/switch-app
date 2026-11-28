@@ -36,6 +36,28 @@ struct HelperEvent: Decodable {
     let watts: Double?
     let kind: String? // press: "single", "double", "long", "multi"
     let count: Int?
+    let humidifier: RawHumidifier?
+    let online: Bool?
+    let found: [RawFound]?
+    let ip: String?
+
+    struct RawHumidifier: Decodable {
+        let power: Bool
+        let mode: Int?
+        let target: Int?
+        let humidity: Int?
+        let temperature: Double?
+        let waterPercent: Int?
+        let water: String
+        let fault: Int?
+    }
+
+    struct RawFound: Decodable {
+        let ip: String
+        let deviceId: Int
+        let model: String?
+        let token: String?
+    }
 }
 
 /// Runs the matter.js helper with the Node.js installed on this Mac and exchanges JSON lines with it.
@@ -45,6 +67,8 @@ final class HelperClient {
     var onEvent: ((HelperEvent) -> Void)?
     var onCrash: (() -> Void)?
     var onNodeMissing: (() -> Void)?
+    /// Called each time a helper process has started, so the app can hand it its configuration again.
+    var onStart: (() -> Void)?
 
     private var process: Process?
     private var input: FileHandle?
@@ -132,6 +156,7 @@ final class HelperClient {
             input = inPipe.fileHandleForWriting
             buffer.removeAll()
             startedAt = Date()
+            onStart?()
         } catch {
             appendLog("failed to launch helper: \(error)")
             nodeURL = nil // look for Node again next time

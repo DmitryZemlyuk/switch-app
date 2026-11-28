@@ -34,6 +34,11 @@ test("commands", () => {
   assert.deepEqual(parseCommand('{"cmd":"unpair"}'), { cmd: "unpair" });
   assert.deepEqual(parseCommand('{"cmd":"identify","id":"6"}'), { cmd: "identify", id: "6" });
   assert.equal(parseCommand('{"cmd":"identify"}'), null);
+  assert.deepEqual(parseCommand('{"cmd":"humidifier.connect","ip":"192.168.1.5","token":"t","deviceId":12}'),
+    { cmd: "humidifier.connect", ip: "192.168.1.5", token: "t", deviceId: 12 });
+  assert.equal(parseCommand('{"cmd":"humidifier.connect","ip":"x"}'), null);
+  assert.deepEqual(parseCommand('{"cmd":"humidifier.set","prop":"target","value":60}'), { cmd: "humidifier.set", prop: "target", value: 60 });
+  assert.deepEqual(parseCommand('{"cmd":"humidifier.find"}'), { cmd: "humidifier.find" });
   assert.equal(parseCommand("nope"), null);
   assert.equal(parseCommand('{"cmd":"rm"}'), null);
 });

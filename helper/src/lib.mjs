@@ -50,6 +50,15 @@ export function parseCommand(line) {
       return typeof msg.code === "string" ? { cmd: "pair", code: msg.code } : null;
     case "set":
       return typeof msg.id === "string" && typeof msg.on === "boolean" ? { cmd: "set", id: msg.id, on: msg.on } : null;
+    case "humidifier.find":
+    case "humidifier.disconnect":
+      return { cmd: msg.cmd };
+    case "humidifier.connect":
+      return typeof msg.ip === "string" && typeof msg.token === "string"
+        ? { cmd: msg.cmd, ip: msg.ip, token: msg.token, deviceId: Number.isInteger(msg.deviceId) ? msg.deviceId : null }
+        : null;
+    case "humidifier.set":
+      return typeof msg.prop === "string" && msg.value !== undefined ? { cmd: msg.cmd, prop: msg.prop, value: msg.value } : null;
     case "identify":
       return typeof msg.id === "string" ? { cmd: "identify", id: msg.id } : null;
     case "unpair":

@@ -13,6 +13,16 @@ enum Palette {
         scheme == .dark ? Color.white.opacity(0.10) : Color.black.opacity(0.06)
     }
 
+    static func alert(_ scheme: ColorScheme) -> Color {
+        scheme == .dark ? Color(red: 1, green: 0x69 / 255, blue: 0x61 / 255)
+                        : Color(red: 0xC4 / 255, green: 0x00 / 255, blue: 0x1A / 255)
+    }
+
+    static func warning(_ scheme: ColorScheme) -> Color {
+        scheme == .dark ? Color(red: 1, green: 0x9F / 255, blue: 0x0A / 255)
+                        : Color(red: 0xB2 / 255, green: 0x5E / 255, blue: 0x00 / 255)
+    }
+
     static func segmentOn(_ scheme: ColorScheme) -> Color {
         scheme == .dark ? Color.white.opacity(0.18) : Color.white
     }
@@ -23,13 +33,7 @@ struct PopoverView: View {
     @EnvironmentObject var l10n: L10n
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            if model.connection == .unpaired || model.connection == .pairing {
-                PairingView()
-            } else {
-                MainView()
-            }
-        }
+        MainView()
         .padding(14)
         .frame(width: 340)
     }
@@ -43,15 +47,27 @@ struct MainView: View {
 
     private let columns = [GridItem(.flexible(), spacing: 10), GridItem(.flexible(), spacing: 10)]
 
+    private var hubUnpaired: Bool { model.connection == .unpaired || model.connection == .pairing }
+
     private var hasItems: Bool {
-        model.tab == .plugs ? !model.devices.isEmpty : !model.sensors.isEmpty
+        switch model.tab {
+        case .plugs: return !hubUnpaired && !model.devices.isEmpty
+        case .sensors: return !hubUnpaired && !model.sensors.isEmpty
+        case .humidifier: return false
+        }
+    }
+
+    /// The pairing and humidifier setup screens show errors themselves.
+    private var showsOwnErrors: Bool {
+        (model.tab != .humidifier && hubUnpaired) || (model.tab == .humidifier && !model.humidifierConfigured)
     }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             VStack(alignment: .leading, spacing: 8) {
+                TabSwitcher()
                 HStack(alignment: .center) {
-                    TabSwitcher()
+                    StatusLine()
                     Spacer(minLength: 8)
                     if hasItems && model.connection != .nodeMissing {
                         Button {
@@ -68,7 +84,6 @@ struct MainView: View {
                         .noFocusRing()
                     }
                 }
-                StatusLine()
             }
 
             if model.connection == .nodeMissing {
@@ -79,13 +94,17 @@ struct MainView: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
                 Link("nodejs.org", destination: URL(string: "https://nodejs.org/")!)
                     .font(.system(size: 12))
+            } else if model.tab == .humidifier {
+                HumidifierContent()
+            } else if hubUnpaired {
+                PairingView()
             } else if model.tab == .plugs {
                 plugsContent
             } else {
                 SensorsContent()
             }
 
-            if let key = model.errorKey {
+            if let key = model.errorKey, !showsOwnErrors {
                 Text(l10n.t(key))
                     .font(.system(size: 11))
                     .foregroundStyle(.red)
@@ -147,14 +166,13 @@ struct TabSwitcher: View {
     var body: some View {
         HStack(spacing: 0) {
             segment(.plugs, title: l10n.t("tab.plugs"), dot: nil)
-            segment(.sensors, title: l10n.t("tab.sensors"), dot: model.needsAttention ? attentionColor : nil)
+            segment(.sensors, title: l10n.t("tab.sensors"),
+                    dot: model.sensorsNeedAttention ? (model.anyLeak ? .red : .orange) : nil)
+            segment(.humidifier, title: l10n.t("tab.humidifier"),
+                    dot: model.humidifierAlert ? .red : (model.humidifierWarning ? .orange : nil))
         }
         .padding(2)
         .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(Palette.chip(scheme)))
-    }
-
-    private var attentionColor: Color {
-        model.anyLeak ? .red : .orange
     }
 
     private func segment(_ tab: Tab, title: String, dot: Color?) -> some View {
@@ -164,12 +182,15 @@ struct TabSwitcher: View {
         } label: {
             HStack(spacing: 5) {
                 Text(title)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.85)
                 if let dot {
                     Circle().fill(dot).frame(width: 6, height: 6)
                 }
             }
             .font(.system(size: 12, weight: .medium))
-            .padding(.horizontal, 12)
+            .padding(.horizontal, 6)
+            .frame(maxWidth: .infinity)
             .frame(height: 24)
             .foregroundStyle(Color.primary)
             .background(
@@ -200,7 +221,17 @@ struct StatusLine: View {
         }
     }
 
+    private var onHumidifierTab: Bool { model.tab == .humidifier && model.connection != .nodeMissing }
+
     private var color: Color {
+        if onHumidifierTab {
+            guard model.humidifierConfigured else { return .secondary }
+            switch model.humidifierOnline {
+            case true?: return (model.humidifier?.fault ?? 0) != 0 ? .red : Color(red: 0x30 / 255, green: 0xA1 / 255, blue: 0x4E / 255)
+            case false?: return .red
+            case nil: return .orange
+            }
+        }
         switch model.connection {
         case .connected: return Color(red: 0x30 / 255, green: 0xA1 / 255, blue: 0x4E / 255)
         case .disconnected, .helperFailed, .nodeMissing: return .red
@@ -209,9 +240,20 @@ struct StatusLine: View {
     }
 
     private var text: String {
+        if onHumidifierTab {
+            guard model.humidifierConfigured else { return l10n.t("hum.status.none") }
+            switch model.humidifierOnline {
+            case true?:
+                if let fault = model.humidifier?.fault, fault != 0 { return l10n.t("hum.status.fault", "\(fault)") }
+                return l10n.t("hum.status.online")
+            case false?: return l10n.t("hum.status.offline")
+            case nil: return l10n.t("hum.status.connecting")
+            }
+        }
         switch model.connection {
         case .connected: return l10n.t("status.connected")
-        case .searching, .pairing, .unpaired: return l10n.t("status.searching")
+        case .unpaired: return l10n.t("status.unpaired")
+        case .searching, .pairing: return l10n.t("status.searching")
         case .reconnecting: return l10n.t("status.reconnecting")
         case .disconnected: return l10n.t("status.disconnected")
         case .helperFailed: return l10n.t("status.helperFailed")

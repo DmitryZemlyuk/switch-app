@@ -44,7 +44,7 @@ struct Sensor: Identifiable, Equatable {
 }
 
 enum Tab: String {
-    case plugs, sensors
+    case plugs, sensors, humidifier
 }
 
 /// What the user changed for a device: stored per Matter endpoint id.
@@ -70,6 +70,16 @@ final class AppModel: ObservableObject {
     @Published private(set) var lastPress: [String: String] = [:]
     /// Devices currently blinking after "Identify".
     @Published private(set) var identifying: Set<String> = []
+    // Humidifier
+    @Published private(set) var humidifierConfigured = false
+    @Published private(set) var humidifier: HumidifierState?
+    @Published private(set) var humidifierOnline: Bool?
+    @Published private(set) var humidifierSearching = false
+    @Published private(set) var foundHumidifiers: [FoundHumidifier]?
+    /// Target shown while the user taps − / +; sent after a short pause.
+    @Published private(set) var pendingTarget: Int?
+    private var targetTask: Task<Void, Never>?
+
     @Published var tab: Tab = .plugs {
         didSet {
             if tab != oldValue { editing = false }
@@ -97,10 +107,15 @@ final class AppModel: ObservableObject {
         lastPress = UserDefaults.standard.dictionary(forKey: Self.pressKey) as? [String: String] ?? [:]
         helper.onEvent = { [weak self] event in self?.handle(event) }
         helper.onCrash = { [weak self] in
-            guard let self, self.connection != .unpaired else { return }
+            guard let self else { return }
+            self.humidifierSearching = false
+            if self.humidifierConfigured { self.humidifierOnline = false }
+            guard self.connection != .unpaired else { return }
             self.connection = .helperFailed
         }
         helper.onNodeMissing = { [weak self] in self?.connection = .nodeMissing }
+        helper.onStart = { [weak self] in self?.sendHumidifierConfig() }
+        humidifierConfigured = HumidifierStore.load() != nil
         helper.start()
     }
 
@@ -116,7 +131,25 @@ final class AppModel: ObservableObject {
 
     var anyLowBattery: Bool { visibleSensors.contains { $0.battery?.isLow == true } }
 
-    var needsAttention: Bool { anyLeak || anyLowBattery }
+    var sensorsNeedAttention: Bool { anyLeak || anyLowBattery }
+
+    /// Red: humidifier opened or reporting a fault. Orange: low water.
+    var humidifierAlert: Bool {
+        guard humidifierConfigured, let h = humidifier, humidifierOnline == true else { return false }
+        return h.water == .open || h.fault != 0
+    }
+
+    var humidifierWarning: Bool {
+        guard humidifierConfigured, let h = humidifier, humidifierOnline == true else { return false }
+        return h.water == .low
+    }
+
+    var needsAttention: Bool { sensorsNeedAttention || humidifierAlert || humidifierWarning }
+
+    /// Whether the menu bar dot should be red rather than orange.
+    var attentionIsAlert: Bool { anyLeak || humidifierAlert }
+
+    var humidifierTarget: Int? { pendingTarget ?? humidifier?.target }
 
     var canControl: Bool { connection == .connected }
 
@@ -233,6 +266,71 @@ final class AppModel: ObservableObject {
         helper.send(["cmd": "refresh"])
     }
 
+    // MARK: - Humidifier actions
+
+    private func sendHumidifierConfig() {
+        guard let stored = HumidifierStore.load() else { return }
+        let (config, token) = stored
+        var message: [String: Any] = ["cmd": "humidifier.connect", "ip": config.ip, "token": token]
+        if let id = config.deviceId { message["deviceId"] = id }
+        helper.send(message)
+    }
+
+    func findHumidifiers() {
+        humidifierSearching = true
+        foundHumidifiers = nil
+        errorKey = nil
+        helper.send(["cmd": "humidifier.find"])
+    }
+
+    func connectHumidifier(ip: String, token: String, deviceId: Int?) {
+        guard HumidifierStore.isValidIP(ip), HumidifierStore.isValidToken(token) else { return }
+        HumidifierStore.save(HumidifierConfig(ip: ip, deviceId: deviceId), token: token)
+        humidifierConfigured = true
+        humidifier = nil
+        humidifierOnline = nil
+        foundHumidifiers = nil
+        sendHumidifierConfig()
+    }
+
+    func forgetHumidifier() {
+        helper.send(["cmd": "humidifier.disconnect"])
+        HumidifierStore.clear()
+        humidifierConfigured = false
+        humidifier = nil
+        humidifierOnline = nil
+        pendingTarget = nil
+    }
+
+    func setHumidifierPower(_ on: Bool) {
+        guard humidifierOnline == true else { return }
+        humidifier?.power = on
+        helper.send(["cmd": "humidifier.set", "prop": "power", "value": on])
+    }
+
+    func setHumidifierMode(_ mode: Int) {
+        guard humidifierOnline == true, (0...3).contains(mode) else { return }
+        humidifier?.mode = mode
+        helper.send(["cmd": "humidifier.set", "prop": "mode", "value": mode])
+    }
+
+    /// − / + taps change the number at once and send it 0.6 s after the last tap.
+    func changeHumidifierTarget(by delta: Int) {
+        guard humidifierOnline == true, let current = humidifierTarget else { return }
+        let value = min(80, max(30, current + delta))
+        pendingTarget = value
+        targetTask?.cancel()
+        targetTask = Task { @MainActor [weak self] in
+            try? await Task.sleep(nanoseconds: 600_000_000)
+            guard let self, !Task.isCancelled else { return }
+            self.helper.send(["cmd": "humidifier.set", "prop": "target", "value": value])
+            self.humidifier?.target = value
+            // Keep showing the new value until the device reports it.
+            try? await Task.sleep(nanoseconds: 3_000_000_000)
+            if !Task.isCancelled, self.pendingTarget == value { self.pendingTarget = nil }
+        }
+    }
+
     /// Makes the device blink for a few seconds so it can be found.
     func identify(id: String) {
         guard canControl, !identifying.contains(id) else { return }
@@ -275,6 +373,24 @@ final class AppModel: ObservableObject {
         case "power":
             guard let id = event.id, let index = devices.firstIndex(where: { $0.id == id }) else { break }
             if let watts = event.watts, devices[index].watts != watts { devices[index].watts = watts }
+        case "humidifier":
+            if let raw = event.humidifier {
+                humidifier = HumidifierState(
+                    power: raw.power, mode: raw.mode, target: raw.target, humidity: raw.humidity,
+                    temperature: raw.temperature, waterPercent: raw.waterPercent,
+                    water: HumidifierState.Water(rawValue: raw.water) ?? .ok, fault: raw.fault ?? 0)
+                humidifierOnline = true
+            }
+        case "humidifier.online":
+            humidifierOnline = event.online
+        case "humidifier.moved":
+            if let ip = event.ip { HumidifierStore.updateIP(ip) }
+        case "humidifier.found":
+            humidifierSearching = false
+            foundHumidifiers = (event.found ?? []).map {
+                FoundHumidifier(ip: $0.ip, deviceId: $0.deviceId, model: $0.model, token: $0.token)
+            }
+            .sorted { ($0.isHumidifier ? 0 : 1, $0.ip) < ($1.isHumidifier ? 0 : 1, $1.ip) }
         case "press":
             guard let id = event.id else { break }
             let kind = event.kind ?? "single"
@@ -316,6 +432,10 @@ final class AppModel: ObservableObject {
         switch code {
         case "start_failed":
             connection = .helperFailed
+        case "humidifier_set_failed":
+            show(errorKey: "err.humidifier_set_failed")
+        case "humidifier_bad_config":
+            show(errorKey: "err.humidifier_bad_config")
         case "identify_failed":
             identifying.removeAll() // nothing is blinking: don't keep saying so
             show(errorKey: "err.identify_failed")

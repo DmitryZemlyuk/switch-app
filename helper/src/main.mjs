@@ -4,9 +4,13 @@
 // and talks to it with JSON lines:
 //   stdin  (app → helper): {"cmd":"pair","code":"…"} | {"cmd":"set","id":"3","on":true} | {"cmd":"unpair"} | {"cmd":"refresh"}
 //                          {"cmd":"identify","id":"6"}
+//                          {"cmd":"humidifier.find"} | {"cmd":"humidifier.connect","ip":"…","token":"…","deviceId":123}
+//                          {"cmd":"humidifier.set","prop":"power|mode|target","value":…} | {"cmd":"humidifier.disconnect"}
 //   stdout (helper → app): {"ev":"state","state":"…"} | {"ev":"devices","devices":[…]} | {"ev":"update","id":"3","on":true}
 //                          {"ev":"sensors","sensors":[…]} | {"ev":"press","id":"4","kind":"double","count":2}
 //                          {"ev":"power","id":"8","watts":38.2}
+//                          {"ev":"humidifier","humidifier":{…}} | {"ev":"humidifier.online","online":true}
+//                          {"ev":"humidifier.found","found":[…]} | {"ev":"humidifier.moved","ip":"…"}
 //                          {"ev":"error","code":"…","message":"…"}
 // All matter.js logging goes to stderr so stdout stays a clean protocol channel.
 
@@ -22,6 +26,7 @@ import {
   kindForDeviceTypes, normalizePairingCode, connectionStateName, parseCommand,
   sensorTypeFor, batteryFrom, CLUSTER, PressClassifier, wattsFrom,
 } from "./lib.mjs";
+import { HumidifierController } from "./humidifier.mjs";
 
 // Short network drops (Mac asleep, Wi-Fi switching) make every UDP socket report these; matter.js recovers by itself.
 const NETWORK_NOISE = /recvmsg (EHOSTUNREACH|ENETUNREACH|ENETDOWN|EADDRNOTAVAIL)/;
@@ -62,6 +67,7 @@ let node; // PairedNode of the hub
 let busy = false; // pairing or unpairing in progress
 const switches = new Map(); // endpoint id → OnOff cluster client
 const endpoints = new Map(); // endpoint id → Endpoint, for Identify
+const humidifier = new HumidifierController(send);
 const presses = new PressClassifier((id, kind, count) => send({ ev: "press", id, kind, count }));
 
 let structureLogged = false;
@@ -375,6 +381,10 @@ async function handle(line) {
     case "unpair": return unpair();
     case "set": return setSwitch(cmd.id, cmd.on);
     case "identify": return identify(cmd.id);
+    case "humidifier.find": return humidifier.find();
+    case "humidifier.connect": return humidifier.connect(cmd);
+    case "humidifier.disconnect": return humidifier.disconnect();
+    case "humidifier.set": return humidifier.set(cmd.prop, cmd.value);
     case "refresh":
       if (node) {
         send({ ev: "state", state: connectionStateName(node.connectionState) });
@@ -388,6 +398,7 @@ let closing = false;
 async function shutdown(exitCode = 0) {
   if (closing) return;
   closing = true;
+  humidifier.disconnect();
   try { await controller.close(); } catch {}
   process.exit(exitCode);
 }
