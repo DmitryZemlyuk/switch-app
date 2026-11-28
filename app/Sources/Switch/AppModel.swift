@@ -109,6 +109,7 @@ final class AppModel: ObservableObject {
         helper.onCrash = { [weak self] in
             guard let self else { return }
             self.humidifierSearching = false
+            self.humidifierDumping = false
             if self.humidifierConfigured { self.humidifierOnline = false }
             guard self.connection != .unpaired else { return }
             self.connection = .helperFailed
@@ -293,6 +294,17 @@ final class AppModel: ObservableObject {
         sendHumidifierConfig()
     }
 
+    /// Diagnostics: the helper writes every property the humidifier answers into the log.
+    @Published private(set) var humidifierDumping = false
+    /// Called when a dump has been written, to show the log.
+    var onHumidifierDumped: (() -> Void)?
+
+    func dumpHumidifier() {
+        guard humidifierOnline == true, !humidifierDumping else { return }
+        humidifierDumping = true
+        helper.send(["cmd": "humidifier.dump"])
+    }
+
     func forgetHumidifier() {
         helper.send(["cmd": "humidifier.disconnect"])
         HumidifierStore.clear()
@@ -383,6 +395,9 @@ final class AppModel: ObservableObject {
             }
         case "humidifier.online":
             humidifierOnline = event.online
+        case "humidifier.dumped":
+            humidifierDumping = false
+            onHumidifierDumped?()
         case "humidifier.device":
             if let id = event.deviceId { HumidifierStore.updateDeviceId(id) }
         case "humidifier.moved":
@@ -434,6 +449,8 @@ final class AppModel: ObservableObject {
         switch code {
         case "start_failed":
             connection = .helperFailed
+        case "humidifier_dump_failed":
+            humidifierDumping = false
         case "humidifier_set_failed":
             show(errorKey: "err.humidifier_set_failed")
         case "humidifier_bad_config":

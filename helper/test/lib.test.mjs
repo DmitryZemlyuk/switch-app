@@ -39,6 +39,7 @@ test("commands", () => {
   assert.equal(parseCommand('{"cmd":"humidifier.connect","ip":"x"}'), null);
   assert.deepEqual(parseCommand('{"cmd":"humidifier.set","prop":"target","value":60}'), { cmd: "humidifier.set", prop: "target", value: 60 });
   assert.deepEqual(parseCommand('{"cmd":"humidifier.find"}'), { cmd: "humidifier.find" });
+  assert.deepEqual(parseCommand('{"cmd":"humidifier.dump"}'), { cmd: "humidifier.dump" });
   assert.equal(parseCommand("nope"), null);
   assert.equal(parseCommand('{"cmd":"rm"}'), null);
 });

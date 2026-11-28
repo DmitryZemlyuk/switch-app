@@ -89,6 +89,44 @@ export class HumidifierController {
     this.send({ ev: "humidifier.found", found: devices });
   }
 
+  /**
+   * Diagnostics: asks the device for miIO.info and every property in services 1–12, properties 1–20,
+   * and writes what answers to the log. Shows what a (custom) firmware exposes beyond the known ones.
+   */
+  async dump() {
+    if (!this.device) {
+      this.send({ ev: "error", code: "humidifier_dump_failed", message: "Not connected" });
+      return;
+    }
+    const names = new Map(Object.entries(CA4).map(([name, p]) => [`${p.siid}.${p.piid}`, name]));
+    const lines = [];
+    try {
+      const info = await this.device.send("miIO.info");
+      const { token, ...safe } = info ?? {}; // never write the key to the log
+      lines.push(`miIO.info: ${JSON.stringify(safe)}`);
+    } catch (error) {
+      lines.push(`miIO.info: ${error?.message ?? error}`);
+    }
+    const all = [];
+    for (let siid = 1; siid <= 12; siid++) for (let piid = 1; piid <= 20; piid++) all.push({ did: `${siid}.${piid}`, siid, piid });
+    let answered = 0;
+    for (let i = 0; i < all.length; i += 20) {
+      try {
+        const result = await this.device.send("get_properties", all.slice(i, i + 20), { timeoutMs: 5000 });
+        for (const item of result ?? []) {
+          if (item?.code !== 0) continue;
+          answered++;
+          const known = names.get(item.did);
+          lines.push(`  ${item.did.padEnd(6)} = ${JSON.stringify(item.value)}${known ? `  (${known})` : ""}`);
+        }
+      } catch (error) {
+        lines.push(`  ${all[i].did}…: ${error?.message ?? error}`);
+      }
+    }
+    process.stderr.write(`humidifier properties (${answered} answered, siid 1–12 × piid 1–20):\n${lines.join("\n")}\n`);
+    this.send({ ev: "humidifier.dumped", count: answered });
+  }
+
   connect(config) {
     if (!config || typeof config.ip !== "string" || !isValidToken(config.token)) {
       this.send({ ev: "error", code: "humidifier_bad_config", message: "IP or token missing" });

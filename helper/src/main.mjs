@@ -6,12 +6,13 @@
 //                          {"cmd":"identify","id":"6"}
 //                          {"cmd":"humidifier.find"} | {"cmd":"humidifier.connect","ip":"…","token":"…","deviceId":123}
 //                          {"cmd":"humidifier.set","prop":"power|mode|target","value":…} | {"cmd":"humidifier.disconnect"}
+//                          {"cmd":"humidifier.dump"}  (diagnostics into the log)
 //   stdout (helper → app): {"ev":"state","state":"…"} | {"ev":"devices","devices":[…]} | {"ev":"update","id":"3","on":true}
 //                          {"ev":"sensors","sensors":[…]} | {"ev":"press","id":"4","kind":"double","count":2}
 //                          {"ev":"power","id":"8","watts":38.2}
 //                          {"ev":"humidifier","humidifier":{…}} | {"ev":"humidifier.online","online":true}
 //                          {"ev":"humidifier.found","found":[…]} | {"ev":"humidifier.moved","ip":"…"}
-//                          {"ev":"humidifier.device","deviceId":123}
+//                          {"ev":"humidifier.device","deviceId":123} | {"ev":"humidifier.dumped","count":12}
 //                          {"ev":"error","code":"…","message":"…"}
 // All matter.js logging goes to stderr so stdout stays a clean protocol channel.
 
@@ -386,6 +387,7 @@ async function handle(line) {
     case "humidifier.connect": return humidifier.connect(cmd);
     case "humidifier.disconnect": return humidifier.disconnect();
     case "humidifier.set": return humidifier.set(cmd.prop, cmd.value);
+    case "humidifier.dump": return humidifier.dump();
     case "refresh":
       if (node) {
         send({ ev: "state", state: connectionStateName(node.connectionState) });

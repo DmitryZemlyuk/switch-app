@@ -52,6 +52,7 @@ export function parseCommand(line) {
       return typeof msg.id === "string" && typeof msg.on === "boolean" ? { cmd: "set", id: msg.id, on: msg.on } : null;
     case "humidifier.find":
     case "humidifier.disconnect":
+    case "humidifier.dump":
       return { cmd: msg.cmd };
     case "humidifier.connect":
       return typeof msg.ip === "string" && typeof msg.token === "string"

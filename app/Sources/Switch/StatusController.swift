@@ -41,6 +41,8 @@ final class StatusController: NSObject {
             .sink { [weak self] _ in self?.updateIcon() }
             .store(in: &cancellables)
         updateIcon()
+        // Show the log as soon as the humidifier's properties are written to it.
+        model.onHumidifierDumped = { [weak self] in self?.showLog() }
     }
 
     private func updateIcon() {
@@ -131,6 +133,11 @@ final class StatusController: NSObject {
 
         if model.humidifierConfigured {
             menu.addItem(.separator())
+            let dump = NSMenuItem(title: model.humidifierDumping ? l10n.t("menu.dumpingHumidifier") : l10n.t("menu.dumpHumidifier"),
+                                  action: model.humidifierOnline == true && !model.humidifierDumping ? #selector(dumpHumidifier) : nil,
+                                  keyEquivalent: "")
+            dump.target = self
+            menu.addItem(dump)
             let forget = NSMenuItem(title: l10n.t("menu.forgetHumidifier"), action: #selector(confirmForgetHumidifier), keyEquivalent: "")
             forget.target = self
             menu.addItem(forget)
@@ -187,6 +194,10 @@ final class StatusController: NSObject {
         if alert.runModal() == .alertFirstButtonReturn {
             model.unpair()
         }
+    }
+
+    @objc private func dumpHumidifier() {
+        model.dumpHumidifier()
     }
 
     @objc private func confirmForgetHumidifier() {
