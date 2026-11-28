@@ -342,7 +342,11 @@ struct FanRow: View {
             .accessibilityValue(rpm(setting))
 
             if open {
-                Slider(value: $value, in: 300...990, step: 10, onEditingChanged: { editing in
+                // No `step:` here: macOS draws a tick mark per step (70 of them). Snap to 10 rpm ourselves.
+                Slider(value: Binding(
+                    get: { value },
+                    set: { value = ($0 / 10).rounded() * 10 }
+                ), in: 300...990, onEditingChanged: { editing in
                     dragging = editing
                     if !editing { model.setHumidifierFan(Int(value)) } // send when released
                 })
