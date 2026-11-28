@@ -1,5 +1,4 @@
 import Foundation
-import Security
 import SwiftUI
 
 // MARK: - Model
@@ -32,60 +31,47 @@ struct FoundHumidifier: Identifiable, Equatable {
     var isHumidifier: Bool { model?.contains("humidifier") == true }
 }
 
-/// Where the humidifier's address lives (UserDefaults) and its key (Keychain).
+/// The humidifier's address and key, in a file only this user can read
+/// (~/Library/Application Support/Switch/humidifier.json, mode 0600) – next to the Matter keys.
+/// Not the Keychain: the app is ad-hoc signed, so every update would make macOS ask for access again.
 enum HumidifierStore {
-    private static let ipKey = "humidifierIP"
-    private static let deviceKey = "humidifierDeviceId"
-    private static let service = "io.github.dmitryzemlyuk.switch.humidifier"
+    private struct Stored: Codable {
+        var ip: String
+        var deviceId: Int?
+        var token: String
+    }
+
+    private static var url: URL {
+        FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent("Switch/humidifier.json")
+    }
 
     static func load() -> (HumidifierConfig, String)? {
-        guard let ip = UserDefaults.standard.string(forKey: ipKey), let token = readToken() else { return nil }
-        let device = UserDefaults.standard.object(forKey: deviceKey) as? Int
-        return (HumidifierConfig(ip: ip, deviceId: device), token)
+        guard let data = try? Data(contentsOf: url),
+              let stored = try? JSONDecoder().decode(Stored.self, from: data),
+              isValidToken(stored.token) else { return nil }
+        return (HumidifierConfig(ip: stored.ip, deviceId: stored.deviceId), stored.token)
     }
 
     static func save(_ config: HumidifierConfig, token: String) {
-        UserDefaults.standard.set(config.ip, forKey: ipKey)
-        if let id = config.deviceId { UserDefaults.standard.set(id, forKey: deviceKey) }
-        else { UserDefaults.standard.removeObject(forKey: deviceKey) }
-        writeToken(token)
+        write(Stored(ip: config.ip, deviceId: config.deviceId, token: token))
     }
 
     static func updateIP(_ ip: String) {
-        UserDefaults.standard.set(ip, forKey: ipKey)
+        guard let stored = load() else { return }
+        write(Stored(ip: ip, deviceId: stored.0.deviceId, token: stored.1))
     }
 
     static func clear() {
-        UserDefaults.standard.removeObject(forKey: ipKey)
-        UserDefaults.standard.removeObject(forKey: deviceKey)
-        SecItemDelete(query() as CFDictionary)
+        try? FileManager.default.removeItem(at: url)
     }
 
-    private static func query() -> [String: Any] {
-        [kSecClass as String: kSecClassGenericPassword,
-         kSecAttrService as String: service,
-         kSecAttrAccount as String: "token"]
-    }
-
-    private static func readToken() -> String? {
-        var q = query()
-        q[kSecReturnData as String] = true
-        q[kSecMatchLimit as String] = kSecMatchLimitOne
-        var item: CFTypeRef?
-        guard SecItemCopyMatching(q as CFDictionary, &item) == errSecSuccess,
-              let data = item as? Data else { return nil }
-        return String(data: data, encoding: .utf8)
-    }
-
-    private static func writeToken(_ token: String) {
-        let data = Data(token.utf8)
-        let status = SecItemUpdate(query() as CFDictionary, [kSecValueData as String: data] as CFDictionary)
-        if status == errSecItemNotFound {
-            var add = query()
-            add[kSecValueData as String] = data
-            add[kSecAttrAccessible as String] = kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly
-            SecItemAdd(add as CFDictionary, nil)
-        }
+    private static func write(_ stored: Stored) {
+        guard let data = try? JSONEncoder().encode(stored) else { return }
+        let fm = FileManager.default
+        try? fm.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+        fm.createFile(atPath: url.path, contents: data, attributes: [.posixPermissions: 0o600])
+        try? fm.setAttributes([.posixPermissions: 0o600], ofItemAtPath: url.path)
     }
 
     static func isValidToken(_ value: String) -> Bool {
