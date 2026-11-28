@@ -16,7 +16,9 @@ export const CA4 = {
   humidity: { siid: 3, piid: 9 },
 };
 
-const READ = ["power", "fault", "mode", "target", "water", "temperature", "humidity", "fan", "fanActual"];
+const READ = ["power", "fault", "mode", "target", "water", "temperature", "humidity"];
+// Asked separately: the device drops some answers from larger requests, and the fan values are optional.
+const READ_FAN = ["fan", "fanActual"];
 const LOW_WATER_PERCENT = 20;
 
 /** Raw MIoT water level → { percent, state }. state is "ok", "low" or "open" (top of the humidifier removed). */
@@ -176,8 +178,12 @@ export class HumidifierController {
     this.polling = true;
     const device = this.device;
     try {
-      const params = READ.map((name) => ({ did: name, ...CA4[name] }));
-      const result = await device.send("get_properties", params);
+      const params = (names) => names.map((name) => ({ did: name, ...CA4[name] }));
+      const result = await device.send("get_properties", params(READ));
+      if (device !== this.device) return;
+      try {
+        result.push(...(await device.send("get_properties", params(READ_FAN))));
+      } catch {} // without them the fan row just stays hidden
       if (device !== this.device) return;
       this.failures = 0;
       // Set up by hand, the device id is unknown: learn it from the handshake so a new IP can be found later.
@@ -198,7 +204,8 @@ export class HumidifierController {
       }
     } finally {
       this.polling = false;
-      if (this.device) this.#schedule(this.pollMs);
+      // After a reconnect this poll belongs to the old device: the new one has its own schedule.
+      if (this.device && device === this.device) this.#schedule(this.pollMs);
     }
   }
 
