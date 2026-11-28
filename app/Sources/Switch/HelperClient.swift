@@ -40,6 +40,7 @@ struct HelperEvent: Decodable {
     let online: Bool?
     let found: [RawFound]?
     let ip: String?
+    let deviceId: Int?
 
     struct RawHumidifier: Decodable {
         let power: Bool

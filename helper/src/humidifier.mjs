@@ -136,6 +136,11 @@ export class HumidifierController {
       const result = await device.send("get_properties", params);
       if (device !== this.device) return;
       this.failures = 0;
+      // Set up by hand, the device id is unknown: learn it from the handshake so a new IP can be found later.
+      if (this.config && this.config.deviceId === null && Number.isInteger(device.deviceId)) {
+        this.config.deviceId = device.deviceId;
+        this.send({ ev: "humidifier.device", deviceId: device.deviceId });
+      }
       this.#setOnline(true);
       this.send({ ev: "humidifier", humidifier: stateFrom(result) });
     } catch (error) {

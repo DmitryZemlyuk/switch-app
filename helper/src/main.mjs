@@ -11,6 +11,7 @@
 //                          {"ev":"power","id":"8","watts":38.2}
 //                          {"ev":"humidifier","humidifier":{…}} | {"ev":"humidifier.online","online":true}
 //                          {"ev":"humidifier.found","found":[…]} | {"ev":"humidifier.moved","ip":"…"}
+//                          {"ev":"humidifier.device","deviceId":123}
 //                          {"ev":"error","code":"…","message":"…"}
 // All matter.js logging goes to stderr so stdout stays a clean protocol channel.
 

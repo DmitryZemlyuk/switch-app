@@ -62,6 +62,11 @@ enum HumidifierStore {
         write(Stored(ip: ip, deviceId: stored.0.deviceId, token: stored.1))
     }
 
+    static func updateDeviceId(_ deviceId: Int) {
+        guard let stored = load() else { return }
+        write(Stored(ip: stored.0.ip, deviceId: deviceId, token: stored.1))
+    }
+
     static func clear() {
         try? FileManager.default.removeItem(at: url)
     }

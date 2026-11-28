@@ -383,6 +383,8 @@ final class AppModel: ObservableObject {
             }
         case "humidifier.online":
             humidifierOnline = event.online
+        case "humidifier.device":
+            if let id = event.deviceId { HumidifierStore.updateDeviceId(id) }
         case "humidifier.moved":
             if let ip = event.ip { HumidifierStore.updateIP(ip) }
         case "humidifier.found":
