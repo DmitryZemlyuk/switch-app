@@ -10,11 +10,13 @@ export const CA4 = {
   target: { siid: 2, piid: 6 }, // target humidity, 30–80 with the custom MCU firmware
   water: { siid: 2, piid: 7 }, // raw 0–120, 125 full, 127 top removed
   dry: { siid: 2, piid: 8 },
+  fan: { siid: 2, piid: 11 }, // fan speed used in auto mode, rpm (300–990 with the custom MCU firmware)
+  fanActual: { siid: 7, piid: 1 }, // current fan speed, rpm (read only)
   temperature: { siid: 3, piid: 7 },
   humidity: { siid: 3, piid: 9 },
 };
 
-const READ = ["power", "fault", "mode", "target", "water", "temperature", "humidity"];
+const READ = ["power", "fault", "mode", "target", "water", "temperature", "humidity", "fan", "fanActual"];
 const LOW_WATER_PERCENT = 20;
 
 /** Raw MIoT water level → { percent, state }. state is "ok", "low" or "open" (top of the humidifier removed). */
@@ -41,6 +43,8 @@ export function stateFrom(results) {
     waterPercent: water.percent,
     water: water.state,
     fault: Number.isInteger(values.fault) ? values.fault : 0,
+    fan: Number.isInteger(values.fan) ? values.fan : null,
+    fanActual: Number.isInteger(values.fanActual) ? values.fanActual : null,
   };
 }
 
@@ -53,6 +57,8 @@ export function valueFor(prop, value) {
       return Number.isInteger(value) && value >= 0 && value <= 3 ? value : undefined;
     case "target":
       return Number.isInteger(value) && value >= 30 && value <= 80 ? value : undefined;
+    case "fan":
+      return Number.isInteger(value) && value >= 300 && value <= 990 && value % 10 === 0 ? value : undefined;
     default:
       return undefined;
   }

@@ -14,6 +14,8 @@ struct HumidifierState: Equatable {
     var waterPercent: Int?
     var water: Water
     var fault: Int
+    var fan: Int? // auto-mode fan speed setting, rpm
+    var fanActual: Int? // current fan speed, rpm
 }
 
 struct HumidifierConfig: Equatable {
@@ -148,6 +150,10 @@ struct HumidifierPanel: View {
             .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(Palette.chip(scheme)))
             .opacity(on && live ? 1 : 0.5)
             .disabled(!(on && live))
+
+            if state?.mode == 0, state?.fan != nil {
+                FanRow(live: on && live)
+            }
 
             HStack {
                 Text(l10n.t("hum.target"))
@@ -295,6 +301,81 @@ struct HumidifierPanel: View {
         .buttonStyle(.plain)
         .noFocusRing()
         .accessibilityLabel(label)
+    }
+}
+
+/// Collapsible "Fan in Auto" row (concept B): the speed the fan uses in auto mode, with the live rpm.
+struct FanRow: View {
+    let live: Bool
+
+    @EnvironmentObject var model: AppModel
+    @EnvironmentObject var l10n: L10n
+    @Environment(\.colorScheme) private var scheme
+
+    @State private var open = false
+    @State private var value: Double = 830
+    @State private var dragging = false
+
+    private var setting: Int? { model.humidifierFan }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Button {
+                withAnimation(.easeOut(duration: 0.15)) { open.toggle() }
+            } label: {
+                HStack {
+                    Label(l10n.t("hum.fan"), systemImage: "fan")
+                        .font(.system(size: 12))
+                    Spacer()
+                    Text(rpm(dragging ? Int(value) : setting))
+                        .font(.system(size: 12).monospacedDigit())
+                        .foregroundStyle(.secondary)
+                    Image(systemName: "chevron.right")
+                        .font(.system(size: 10, weight: .semibold))
+                        .foregroundStyle(.secondary)
+                        .rotationEffect(.degrees(open ? 90 : 0))
+                }
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .noFocusRing()
+            .accessibilityValue(rpm(setting))
+
+            if open {
+                Slider(value: $value, in: 300...990, step: 10, onEditingChanged: { editing in
+                    dragging = editing
+                    if !editing { model.setHumidifierFan(Int(value)) } // send when released
+                })
+                .accessibilityLabel(l10n.t("hum.fan"))
+                HStack {
+                    Text("300")
+                    Spacer()
+                    if let actual = model.humidifier?.fanActual {
+                        Text(l10n.t("hum.fanNow", rpm(actual)))
+                    }
+                    Spacer()
+                    Text("990")
+                }
+                .font(.system(size: 10).monospacedDigit())
+                .foregroundStyle(.secondary)
+            }
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 10)
+        .background(RoundedRectangle(cornerRadius: 10, style: .continuous).fill(Palette.tileOff(scheme)))
+        .opacity(live ? 1 : 0.5)
+        .disabled(!live)
+        .onAppear { if let setting { value = Double(clamped(setting)) } }
+        .onChange(of: setting) { newValue in
+            if !dragging, let newValue { value = Double(clamped(newValue)) }
+        }
+    }
+
+    private func clamped(_ rpm: Int) -> Int { min(990, max(300, rpm)) }
+
+    private func rpm(_ value: Int?) -> String {
+        guard let value else { return "–" }
+        return l10n.t("hum.rpm", "\(value)")
     }
 }
 

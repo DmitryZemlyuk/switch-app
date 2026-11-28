@@ -78,6 +78,11 @@ final class AppModel: ObservableObject {
     @Published private(set) var foundHumidifiers: [FoundHumidifier]?
     /// Target shown while the user taps − / +; sent after a short pause.
     @Published private(set) var pendingTarget: Int?
+    /// Fan setting just sent, shown until the device reports it (or a few seconds pass).
+    @Published private(set) var pendingFan: Int?
+    private var fanTask: Task<Void, Never>?
+
+    var humidifierFan: Int? { pendingFan ?? humidifier?.fan }
     private var targetTask: Task<Void, Never>?
 
     @Published var tab: Tab = .plugs {
@@ -312,6 +317,7 @@ final class AppModel: ObservableObject {
         humidifier = nil
         humidifierOnline = nil
         pendingTarget = nil
+        pendingFan = nil
     }
 
     func setHumidifierPower(_ on: Bool) {
@@ -324,6 +330,19 @@ final class AppModel: ObservableObject {
         guard humidifierOnline == true, (0...3).contains(mode) else { return }
         humidifier?.mode = mode
         helper.send(["cmd": "humidifier.set", "prop": "mode", "value": mode])
+    }
+
+    func setHumidifierFan(_ rpm: Int) {
+        guard humidifierOnline == true else { return }
+        let value = min(990, max(300, (rpm / 10) * 10))
+        pendingFan = value
+        helper.send(["cmd": "humidifier.set", "prop": "fan", "value": value])
+        fanTask?.cancel()
+        fanTask = Task { @MainActor [weak self] in
+            try? await Task.sleep(nanoseconds: 4_000_000_000)
+            // If the device didn't take it, fall back to what it reports.
+            if !Task.isCancelled, self?.pendingFan == value { self?.pendingFan = nil }
+        }
     }
 
     /// − / + taps change the number at once and send it 0.6 s after the last tap.
@@ -390,7 +409,9 @@ final class AppModel: ObservableObject {
                 humidifier = HumidifierState(
                     power: raw.power, mode: raw.mode, target: raw.target, humidity: raw.humidity,
                     temperature: raw.temperature, waterPercent: raw.waterPercent,
-                    water: HumidifierState.Water(rawValue: raw.water) ?? .ok, fault: raw.fault ?? 0)
+                    water: HumidifierState.Water(rawValue: raw.water) ?? .ok, fault: raw.fault ?? 0,
+                    fan: raw.fan, fanActual: raw.fanActual)
+                if let pending = pendingFan, raw.fan == pending { pendingFan = nil }
                 humidifierOnline = true
             }
         case "humidifier.online":

@@ -59,10 +59,12 @@ test("state from properties", () => {
     { did: "water", code: 0, value: 90 },
     { did: "temperature", code: 0, value: 22.46 },
     { did: "humidity", code: -4001, value: 0 },
+    { did: "fan", code: 0, value: 830 },
+    { did: "fanActual", code: 0, value: 839 },
   ]);
   assert.deepEqual(state, {
     power: true, mode: 2, target: 65, humidity: null, temperature: 22.5,
-    waterPercent: 75, water: "ok", fault: 0,
+    waterPercent: 75, water: "ok", fault: 0, fan: 830, fanActual: 839,
   });
 });
 
@@ -75,6 +77,11 @@ test("values from the app are validated", () => {
   assert.equal(valueFor("power", false), false);
   assert.equal(valueFor("power", "on"), undefined);
   assert.equal(valueFor("dry", true), undefined);
+  assert.equal(valueFor("fan", 830), 830);
+  assert.equal(valueFor("fan", 835), undefined);
+  assert.equal(valueFor("fan", 290), undefined);
+  assert.equal(valueFor("fan", 1000), undefined);
+  assert.equal(valueFor("fanActual", 500), undefined);
 });
 
 /** A fake ca4 on localhost: answers hello and get/set_properties like the real device. */

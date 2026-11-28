@@ -5,7 +5,7 @@
 //   stdin  (app → helper): {"cmd":"pair","code":"…"} | {"cmd":"set","id":"3","on":true} | {"cmd":"unpair"} | {"cmd":"refresh"}
 //                          {"cmd":"identify","id":"6"}
 //                          {"cmd":"humidifier.find"} | {"cmd":"humidifier.connect","ip":"…","token":"…","deviceId":123}
-//                          {"cmd":"humidifier.set","prop":"power|mode|target","value":…} | {"cmd":"humidifier.disconnect"}
+//                          {"cmd":"humidifier.set","prop":"power|mode|target|fan","value":…} | {"cmd":"humidifier.disconnect"}
 //                          {"cmd":"humidifier.dump"}  (diagnostics into the log)
 //   stdout (helper → app): {"ev":"state","state":"…"} | {"ev":"devices","devices":[…]} | {"ev":"update","id":"3","on":true}
 //                          {"ev":"sensors","sensors":[…]} | {"ev":"press","id":"4","kind":"double","count":2}

@@ -51,6 +51,8 @@ struct HelperEvent: Decodable {
         let waterPercent: Int?
         let water: String
         let fault: Int?
+        let fan: Int?
+        let fanActual: Int?
     }
 
     struct RawFound: Decodable {
